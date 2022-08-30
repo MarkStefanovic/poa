@@ -1,0 +1,15 @@
+# to create new env: conda env create --file environment.yml
+# to update env: conda env update --file environment.yml --prune
+name: poa
+channels:
+- conda-forge
+- defaults
+dependencies:
+- python>=3.10
+- pip
+- loguru
+- mypy
+- pytest
+- pyodbc
+- pyinstaller
+- psycopg2-binary
