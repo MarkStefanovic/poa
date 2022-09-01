@@ -1,16 +1,58 @@
+import datetime
 import operator
+import typing
 
 import pyodbc
 
 from src import data
 
-__all__ = ("create_table",)
+__all__ = ("create_table", "fetch")
 
 
 def create_table(*, con: pyodbc.Connection, table: data.Table) -> None:
     with con.cursor() as cur:
         sql = _generate_create_table_sql(table=table)
         cur.execute(sql)
+
+
+def fetch(
+    *,
+    con: pyodbc.Connection,
+    schema_name: str,
+    table_name: str,
+    column_names: list[str],
+    ts_after: dict[str, datetime.datetime | None],
+) -> list[dict[str, typing.Hashable]]:
+    with con.cursor() as cur:
+        sql = _generate_select_sql(
+            schema_name=schema_name,
+            table_name=table_name,
+            column_names=column_names,
+            ts_after=ts_after,
+        )
+        cur.execute(sql)
+        cols = [col[0] for col in cur.description]
+        return [dict(zip(cols, row)) for row in cur.fetchall()]
+
+
+def _generate_select_sql(
+    *,
+    schema_name: str,
+    table_name: str,
+    column_names: list[str],
+    ts_after: dict[str, datetime.datetime | None],
+) -> str:
+    sql = "SELECT "
+    sql += ", ".join(_wrap_name(col) for col in column_names)
+    sql += f" FROM {_wrap_name(schema_name)}.{_wrap_name(table_name)}"
+    if ts_after:
+        valid_ts_criteria = {col: ts for col, ts in ts_after.items() if ts}
+        if valid_ts_criteria:
+            sql += " WHERE " + " OR ".join(
+                f"{_wrap_name(col)} > {_render_ts(dt)}"
+                for col, dt in valid_ts_criteria.items()
+            )
+    return sql
 
 
 def _generate_create_table_sql(*, table: data.Table) -> str:
@@ -42,10 +84,14 @@ def _generate_column_definition(*, col: data.Column) -> str:
         data.DataType.Float: lambda: f"{col_name} FLOAT {nullable}",
         data.DataType.Int: lambda: f"{col_name} INT {nullable}",
         data.DataType.Text: lambda: f"{col_name} TEXT {nullable}",
-        data.DataType.Timestamp: lambda: f"{col_name} TIMESTAMP {nullable}",
-        data.DataType.TimestampTZ: lambda: f"{col_name} TIMESTAMPTZ {nullable}",
+        data.DataType.Timestamp: lambda: f"{col_name} TIMESTAMP(3) {nullable}",
+        data.DataType.TimestampTZ: lambda: f"{col_name} TIMESTAMPTZ(3) {nullable}",
         data.DataType.UUID: lambda: f"{col_name} UUID {nullable}",
     }[col.data_type]()
+
+
+def _render_ts(dt: datetime.datetime, /) -> str:
+    return "'" + dt.isoformat(sep=' ', timespec='milliseconds') + "'"
 
 
 def _wrap_name(name: str, /) -> str:
@@ -64,5 +110,5 @@ if __name__ == '__main__':
         )),
         pk=("activity_id",),
     )
-    sql = _generate_create_table_sql(table=tbl)
-    print(sql)
+    s = _generate_create_table_sql(table=tbl)
+    print(s)

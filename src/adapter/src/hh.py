@@ -13,7 +13,7 @@ def fetch(
     table_name: str,
     column_names: list[str],
     ts_after: dict[str, datetime.datetime | None],
-) -> list[dict[str, typing.Any]]:
+) -> list[dict[str, typing.Hashable]]:
     with con.cursor() as cur:
         sql = generate_select_sql(
             schema_name=schema_name,
@@ -51,17 +51,17 @@ def _wrap_name(name: str, /) -> str:
 
 
 def _render_dt(dt: datetime.datetime, /) -> str:
-    return "'" + dt.strftime("%Y-%m-%d %H:%M:%S") + "'"
+    return "'" + dt.isoformat(sep=' ', timespec='milliseconds') + "'"
 
 
 if __name__ == '__main__':
-    sql = generate_select_sql(
+    s = generate_select_sql(
         schema_name="dbo",
         table_name="activity",
         column_names=["activity_id_", "changed_date", "code", "name", "created_date"],
         ts_after={
-            "created_date": datetime.datetime(2011, 12, 13, 1, 2, 3),
+            "created_date": datetime.datetime(2011, 12, 13, 1, 2, 3, 4000),
             "changed_date": None,
         }
     )
-    print(sql)
+    print(s)
