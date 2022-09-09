@@ -5,7 +5,7 @@ from src.data.data_type import DataType
 __all__ = ("Column",)
 
 
-@dataclasses.dataclass(frozen=True)
+@dataclasses.dataclass(frozen=True, kw_only=True)
 class Column:
     name: str
     data_type: DataType

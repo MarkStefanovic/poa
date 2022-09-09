@@ -1,2 +1,1 @@
-from src.adapter import config, dst, fs, inspect_table, src
-from src.adapter.inspect_table import *
+from src.adapter import cache, config, cursor_provider, dst_ds, fs, log, src_ds

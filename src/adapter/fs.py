@@ -20,10 +20,12 @@ def _root_dir() -> pathlib.Path:
 
 
 @functools.lru_cache(maxsize=1)
-def config_path() -> pathlib.Path:
+def get_config_path() -> pathlib.Path:
     return _root_dir() / "assets" / "config.json"
 
 
 @functools.lru_cache(maxsize=1)
-def log_folder() -> pathlib.Path:
-    return _root_dir() / "logs"
+def get_log_folder() -> pathlib.Path:
+    folder = _root_dir() / "logs"
+    folder.mkdir(exist_ok=True)
+    return folder

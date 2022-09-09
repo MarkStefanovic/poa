@@ -1,12 +1,13 @@
 import dataclasses
 
-import typing
+from src.data.row import Row
+from src.data.row_key import RowKey
 
 __all__ = ("RowDiff",)
 
 
-@dataclasses.dataclass(frozen=True)
+@dataclasses.dataclass(frozen=True, kw_only=True)
 class RowDiff:
-    added: list[dict[str, typing.Hashable]]
-    changed: list[tuple[dict[str, typing.Hashable], dict[str, typing.Hashable]]]
-    deleted: list[dict[str, typing.Hashable]]
+    added: dict[RowKey, Row]
+    updated: dict[RowKey, tuple[Row, Row]]
+    deleted: dict[RowKey, Row]

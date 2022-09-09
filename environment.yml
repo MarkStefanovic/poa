@@ -13,3 +13,6 @@ dependencies:
 - pyodbc
 - pyinstaller
 - psycopg2-binary
+- typer
+- pip
+  - frozendict

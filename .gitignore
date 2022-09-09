@@ -143,4 +143,5 @@ cython_debug/
 logs
 scratch
 config.json
+test-config.json
 NOTES.md

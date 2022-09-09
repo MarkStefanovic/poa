@@ -1,8 +1,14 @@
 {
-  "connection-string": "host='localhost' dbname='testdb' user='postgres' password='secret'",
-  "max-simultaneous-jobs": 5,
-  "max-connections": 6,
-  "get-seconds-between-updates": 10,
   "get-seconds-between-cleanups":  1800,
-  "days-logs-to-keep": 3
+  "days-logs-to-keep": 3,
+  "ds": {
+    "pg-example": {
+      "api": "psycopg2",
+      "connection-string": "host='localhost' dbname='testdb' user='postgres' password='secret'"
+    },
+    "mssql-example": {
+      "api": "pyodbc",
+      "connection-string": "Driver={SQL Server};Server=server_name;Database=database_name;Trusted_Connection=yes;"
+    }
+  }
 }
