@@ -13,33 +13,65 @@ __all__ = ("PgDstDs",)
 
 # noinspection SqlDialectInspection,SqlNoDataSourceInspection,SqlResolve
 class PgDstDs(data.DstDs):
-    def __init__(self, *, cur: RealDictCursor, table: data.Table):
+    def __init__(self, *, cur: RealDictCursor, db_name: str, table: data.Table):
         self._cur = cur
         self._src_table = table
 
         if table.schema_name:
-            table_name = f"{table.schema_name}_{table.table_name}"
+            dst_table_name = f"{table.db_name}_{table.schema_name}_{table.table_name}"
         else:
-            table_name = table.table_name
+            dst_table_name = f"{table.db_name}_{table.table_name}"
 
-        self._dst_table = dataclasses.replace(table, schema_name="poa", table_name=table_name)
+        self._dst_table = dataclasses.replace(
+            table,
+            db_name=db_name,
+            schema_name="poa",
+            table_name=dst_table_name,
+        )
 
     def create(self) -> None:
-        sql = _generate_create_table_sql(table=self._dst_table)
+        full_table_name = _generate_full_table_name(
+            schema_name=self._dst_table.schema_name,
+            table_name=self._dst_table.table_name,
+        )
+        sql = f"CREATE TABLE {full_table_name} (\n  "
+        sql += "\n, ".join(
+            _generate_column_definition(col=col)
+            for col in sorted(self._dst_table.columns, key=operator.attrgetter("name"))
+        )
+        sql += (
+            "\n, poa_hd CHAR(32) NOT NULL"
+            "\n, poa_op CHAR(1) NOT NULL CHECK (poa_op IN ('a', 'd', 'u'))"
+            "\n, poa_ts TIMESTAMPTZ(3) NOT NULL DEFAULT now()"
+            "\n, PRIMARY KEY (" + ", ".join(_wrap_name(col) for col in self._dst_table.pk) + ")"
+            "\n);"
+        )
         self._cur.execute(sql)
+        self._cur.execute(f"CREATE INDEX ix_{self._dst_table.table_name}_poa_ts ON {full_table_name} (poa_ts DESC);")
+        self._cur.execute(f"CREATE INDEX ix_{self._dst_table.table_name}_poa_op ON {full_table_name} (poa_op);")
+        sync_table_spec = self.get_sync_table_spec()
+        for col in sync_table_spec.increasing_cols:
+            self._cur.execute(f"CREATE INDEX ix_{self._dst_table.table_name}_{col} ON {full_table_name} ({_wrap_name(col)} DESC);")
 
-    def delete_rows(self, /, keys: set[data.RowKey]) -> int:
+    def delete_rows(self, /, keys: set[data.RowKey]) -> None:
         if keys:
-            sql = _generate_delete_rows_sql(
+            full_table_name = _generate_full_table_name(
                 schema_name=self._dst_table.schema_name,
                 table_name=self._dst_table.table_name,
-                keys=keys,
             )
+            key: data.RowKey = next(itertools.islice(keys, 1))
+            key_cols = sorted(key.keys())
+            where_clause = " AND ".join(f"t.{_wrap_name(c)} = %({c})s" for c in key_cols)
+            sql = textwrap.dedent(f"""
+                UPDATE {full_table_name} AS t 
+                SET 
+                    poa_op = 'd'
+                ,   poa_ts = now()
+                WHERE 
+                    {where_clause}
+                    AND poa_op <> 'd'
+            """).strip()
             self._cur.executemany(sql, keys)
-            result = self._cur.fetchall()
-            return sum(row[0] for row in result)
-
-        return 0
 
     def fetch_rows(
         self,
@@ -60,9 +92,28 @@ class PgDstDs(data.DstDs):
         sql = "SELECT\n  "
         sql += "\n, ".join(_wrap_name(col) for col in cols)
         sql += f"\nFROM {full_table_name}"
-
-        self._cur.execute(sql)
+        sorted_after: list[tuple[str, typing.Hashable]] = []
+        params: dict[str, typing.Hashable] | None = None
+        if after:
+            sorted_after = sorted((key, val) for key, val in after.items() if val is not None)
+            params = dict(sorted_after)
+        if sorted_after:
+            sql += "\nWHERE\n  " + "\n  OR ".join(f"{_wrap_name(key)} > %({key})s" for key, val in sorted_after)
+        self._cur.execute(sql, params)
         return self._cur.fetchall()  # type: ignore
+
+    def get_increasing_col_values(self) -> dict[str, typing.Hashable] | None:
+        if sync_table_spec := self.get_sync_table_spec():
+            full_table_name = _generate_full_table_name(schema_name=self._dst_table.schema_name, table_name=self._dst_table.table_name)
+            max_values = {}
+            for col in sorted(sync_table_spec.increasing_cols):
+                self._cur.execute(f"SELECT MAX({_wrap_name(col)}) AS v FROM {full_table_name}")
+                value = self._cur.fetchone()["v"]  # noqa
+                if value is not None:
+                    max_values[col] = value
+            if max_values:
+                return max_values
+        return None
 
     def get_row_count(self) -> int:
         full_table_name = _generate_full_table_name(
@@ -73,7 +124,35 @@ class PgDstDs(data.DstDs):
         return self._cur.fetchone()["ct"]  # noqa
 
     def get_sync_table_spec(self) -> data.SyncTableSpec:
+        self._cur.execute(
+            """
+            SELECT * FROM poa.get_sync_table_spec (
+                p_src_db_name := %(db_name)s
+            ,   p_src_schema_name := %(schema_name)s
+            ,   p_src_table_name := %(table_name)s
+            )
+            """,
+            {"db_name": self._src_table.db_name, "schema_name": self._src_table.schema_name, "table_name": self._src_table.table_name},
+        )
+        row: dict[str, typing.Any]
+        if row := self._cur.fetchone():
+            if compare_cols := row["compare_cols"]:
+                compare_cols = set(compare_cols)
+
+            if increasing_cols := row["increasing_cols"]:
+                increasing_cols = set(increasing_cols)
+
+            return data.SyncTableSpec(
+                db_name=self._src_table.db_name,
+                schema_name=self._src_table.schema_name,
+                table_name=self._src_table.table_name,
+                compare_cols=compare_cols,
+                increasing_cols=increasing_cols,
+                skip_if_row_counts_match=row["skip_if_row_counts_match"],
+            )
+
         raise data.error.SyncTableSpecNotFound(
+            db_name=self._src_table.db_name,
             schema_name=self._src_table.schema_name,
             table_name=self._src_table.table_name,
         )
@@ -87,11 +166,11 @@ class PgDstDs(data.DstDs):
                     WHERE
                         t.table_schema = %(schema_name)s
                         AND t.table_name = %(table_name)s
-                )
+                ) AS tbl_exists
             """,
             {"schema_name": self._dst_table.schema_name, "table_name": self._dst_table.table_name},
         )
-        return self._cur.fetchone()[0]
+        return self._cur.fetchone()["tbl_exists"]  # noqa
 
     def truncate(self) -> None:
         full_table_name = _generate_full_table_name(
@@ -100,70 +179,43 @@ class PgDstDs(data.DstDs):
         )
         self._cur.execute(f"TRUNCATE {full_table_name}")
 
-    def upsert_rows(self, /, rows: typing.Iterable[data.Row]) -> dict[typing.Literal["rows_added", "rows_updated"], int]:
+    def upsert_rows(self, /, rows: typing.Iterable[data.Row]) -> None:
         if rows:
-            sql = _generate_upsert_sql(
-                schema_name=self._dst_table.schema_name,
-                table_name=self._dst_table.table_name,
-                column_names={c.name for c in self._dst_table.columns},
-                pk_cols=self._dst_table.pk,
-            )
+            col_names = sorted({c.name for c in self._dst_table.columns})
+
+            col_name_csv = ", ".join(_wrap_name(c) for c in col_names)
+
+            placeholders = ", ".join(f"%({c})s" for c in col_names)
+
+            hd_col_csv = ", ".join(f"%({c})s" for c in col_names if c not in self._dst_table.pk)
+            hd = f"MD5(ROW({hd_col_csv})::TEXT)"
+
+            pk_csv = ", ".join(_wrap_name(c) for c in self._dst_table.pk)
+
+            set_values_csv = "\n, ".join(
+                f"{_wrap_name(c)} = EXCLUDED.{_wrap_name(c)}"
+                for c in col_names if c not in self._dst_table.pk
+            ) + "\n, poa_hd = EXCLUDED.poa_hd, poa_op = 'u'\n, poa_ts = now()"
+
+            if self._dst_table.schema_name:
+                full_table_name = f"{_wrap_name(self._dst_table.schema_name)}.{_wrap_name(self._dst_table.table_name)}"
+            else:
+                full_table_name = _wrap_name(self._dst_table.table_name)
+
+            sql = textwrap.dedent(f"""
+                INSERT INTO {full_table_name}
+                  ({col_name_csv}, poa_hd, poa_op)
+                VALUES
+                  ({placeholders}, {hd}, 'a')
+                ON CONFLICT ({pk_csv})
+                DO UPDATE SET
+                  {set_values_csv}
+                WHERE
+                    {full_table_name}.poa_hd <> EXCLUDED.poa_hd
+                    OR {full_table_name}.poa_op = 'd'
+                RETURNING poa_op
+            """).strip()
             self._cur.executemany(sql, rows)
-            result = self._cur.fetchall()
-            ops = {row["poa_op"] for row in result}  # noqa
-            rows_added = sum(1 for op in ops if op == "a")
-            rows_updated = sum(1 for op in ops if op == "u")
-            return {"rows_added": rows_added, "rows_updated": rows_updated}
-
-
-# noinspection SqlDialectInspection,SqlNoDataSourceInspection
-def _generate_create_table_sql(*, table: data.Table) -> str:
-    if table.schema_name:
-        full_table_name = f"{_wrap_name(table.schema_name)}.{_wrap_name(table.table_name)}"
-    else:
-        full_table_name = _wrap_name(table.table_name)
-    sql = f"CREATE TABLE {full_table_name} (\n  "
-    sql += "\n, ".join(
-        _generate_column_definition(col=col)
-        for col in sorted(table.columns, key=operator.attrgetter("name"))
-    ) + (
-        "\n, poa_hd CHAR(32) NOT NULL"
-        "\n, poa_op CHAR(1) NOT NULL CHECK (op IN ('a', 'd', 'u'))"
-        "\n, poa_ts TIMESTAMPTZ(3) NOT NULL DEFAULT now()"
-    )
-    if table.pk:
-        sql += "\n, PRIMARY KEY (" + ", ".join(_wrap_name(col) for col in table.pk) + ")"
-    sql += "\n);"
-    sql += f"\nCREATE INDEX ix_{table.table_name}_poa_ts ON {full_table_name} (poa_ts DESC);"
-    sql += f"\nCREATE INDEX ix_{table.table_name}_poa_op ON {full_table_name} (poa_op);"
-    return sql
-
-
-def _generate_delete_rows_sql(
-    *,
-    schema_name: str | None,
-    table_name: str,
-    keys: set[data.RowKey],
-) -> str:
-    assert len(keys) > 0, "keys cannot be empty."
-
-    full_table_name = _generate_full_table_name(schema_name=schema_name, table_name=table_name)
-    key: data.RowKey = next(itertools.islice(keys, 1))
-    key_cols = sorted(key.keys())
-    where_clause = " AND ".join(f"t.{_wrap_name(c)} = %({c})s" for c in key_cols)
-    return textwrap.dedent(f"""
-        WITH del AS (
-            UPDATE {full_table_name} AS t 
-            SET 
-                poa_op = 'd'
-            ,   poa_ts = now()
-            WHERE 
-                {where_clause}
-                AND poa_op <> 'd'
-            RETURNING 1
-        )
-        SELECT * FROM del;
-    """).strip()
 
 
 def _generate_column_definition(*, col: data.Column) -> str:
@@ -198,65 +250,5 @@ def _generate_full_table_name(*, schema_name: str | None, table_name: str) -> st
         return _wrap_name(table_name)
 
 
-# noinspection SqlDialectInspection,SqlNoDataSourceInspection
-def _generate_upsert_sql(
-    *,
-    schema_name: str | None,
-    table_name: str,
-    column_names: set[str],
-    pk_cols: tuple[str],
-) -> str:
-    col_names = sorted(column_names)
-
-    col_name_csv = ", ".join(_wrap_name(c) for c in col_names)
-
-    placeholders = (f"%({c})s" for c in col_names)
-
-    hd_col_csv = ", ".join(_wrap_name(c) for c in col_names if c not in pk_cols)
-    hd = f"MD5(ROW({hd_col_csv})::TEXT)"
-
-    pk_csv = ", ".join(_wrap_name(c) for c in pk_cols)
-
-    set_values_csv = "\n, ".join(
-        f"{_wrap_name(c)} = EXCLUDED.{_wrap_name(c)}"
-        for c in col_names if c not in pk_cols
-    ) + "\n, poa_hd = EXCLUDED.hd, poa_op = 'u'\n, poa_ts = now()"
-
-    if schema_name:
-        full_table_name = f"{_wrap_name(schema_name)}.{_wrap_name(table_name)}"
-    else:
-        full_table_name = _wrap_name(table_name)
-
-    return textwrap.dedent(f"""
-        INSERT INTO {full_table_name}
-          ({col_name_csv}, poa_hd, poa_op)
-        VALUES
-          ({placeholders}, {hd} 'a')
-        ON CONFLICT ({pk_csv})
-        DO UPDATE SET
-          {set_values_csv}
-        WHERE
-            {full_table_name}.poa_hd <> EXCLUDED.poa_hd
-            OR {full_table_name}.poa_op = 'd'
-        RETURNING poa_op
-    """).strip()
-
-
 def _wrap_name(name: str, /) -> str:
     return f'"{name.lower()}"'
-
-
-if __name__ == '__main__':
-    tbl = data.Table(
-        schema_name="gtl",
-        table_name="tmp_activity",
-        columns=frozenset((
-            data.Column(name="activity_id", data_type=data.DataType.Int, nullable=False, length=None, precision=None, scale=None),
-            data.Column(name="description", data_type=data.DataType.Text, nullable=False, length=None, precision=None, scale=None),
-            data.Column(name="created_date", data_type=data.DataType.Timestamp, nullable=False, length=None, precision=None, scale=None),
-            data.Column(name="changed_date", data_type=data.DataType.Timestamp, nullable=False, length=None, precision=None, scale=None),
-        )),
-        pk=("activity_id",),
-    )
-    s = _generate_create_table_sql(table=tbl)
-    print(s)

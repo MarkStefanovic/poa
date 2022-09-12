@@ -19,14 +19,14 @@ class OdbcSrcDs(data.SrcDs):
     def __init__(
         self,
         *,
-        cache: data.Cache,
         cur: pyodbc.Cursor,
+        db_name: str,
         schema_name: str | None,
         table_name: str,
         wrapper: Wrapper = default_wrapper,
     ):
-        self._cache = cache
         self._cur = cur
+        self._db_name = db_name
         self._schema_name = schema_name
         self._table_name = table_name
         self._wrapper = wrapper
@@ -54,7 +54,7 @@ class OdbcSrcDs(data.SrcDs):
         sql += "\n, ".join(_wrap_col_name_w_alias(wrapper=self._wrapper, col_name=col) for col in cols)
         sql += f"\nFROM {self._full_table_name}"
         if sorted_after:
-            sql += "\nWHERE\n  " + "\n  OR ".join(f"{self._wrapper(key)} > ?" for key, val in after)
+            sql += "\nWHERE\n  " + "\n  OR ".join(f"{self._wrapper(key)} > ?" for key, val in sorted_after)
 
         self._cur.execute(sql, params=params)
         return [dict(zip(cols, row)) for row in self._cur.fetchall()]
@@ -96,9 +96,6 @@ class OdbcSrcDs(data.SrcDs):
         if self._table is not None:
             return self._table
 
-        if cached_table_def := self._cache.get_table_definition():
-            return cached_table_def
-
         if not self.table_exists():
             raise data.error.TableDoesntExist(table_name=self._table_name, schema_name=self._schema_name)
 
@@ -116,49 +113,23 @@ class OdbcSrcDs(data.SrcDs):
             )
             cols.append(col)
 
-        if cached_keys := self._cache.get_key_cols():
-            pk = cached_keys
-        else:
-            pk = _get_key_cols(cur=self._cur, schema_name=self._schema_name, table_name=self._table_name)
-            self._cache.add_key_cols(pk)
+        pk = _get_key_cols(cur=self._cur, schema_name=self._schema_name, table_name=self._table_name)
 
         table = data.Table(
+            db_name=self._db_name,
             schema_name=self._schema_name,
             table_name=self._table_name,
             columns=frozenset(cols),
             pk=pk,
         )
 
-        self._cache.add_table_definition(table)
-
         self._table = table
 
         return table
 
     def table_exists(self) -> bool:
-        if (cached_exists_flag := self._cache.get_table_exists()) is not None:
-            return cached_exists_flag
-
         table_exists = bool(self._cur.tables(table=self._table_name, schema=self._schema_name).fetchone())
-        self._cache.add_table_exists()
         return table_exists
-
-
-# def _generate_select_sql(
-#     *,
-#     schema_name: str,
-#     table_name: str,
-#     column_names: set[str],
-#     wrapper: Wrapper,
-#     after: list[tuple[str, typing.Hashable]] | None,
-# ) -> str:
-#     sql = "SELECT\n  "
-#     sql += "\n, ".join(_wrap_col_name_w_alias(wrapper=wrapper, col_name=col) for col in sorted(column_names))
-#     sql += f"\nFROM {wrapper(schema_name)}.{wrapper(table_name)}"
-#     if after:
-#         sql += "\nWHERE\n  " + "\n  OR ".join(f"{wrapper(key)} > ?" for key, val in after)
-#
-#     return sql
 
 
 def _get_data_type(row: pyodbc.Row, /) -> data.DataType:

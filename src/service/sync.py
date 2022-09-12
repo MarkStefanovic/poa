@@ -1,8 +1,7 @@
-import dataclasses
 import datetime
 import typing
 
-from src import adapter, data
+from src import data
 
 __all__ = ("sync",)
 
@@ -11,12 +10,9 @@ def sync(
     *,
     src_ds: data.SrcDs,
     dst_ds: data.DstDs,
-    cache: data.Cache,
     incremental: bool,
 ) -> data.SyncResult:
     try:
-        src_table = src_ds.get_table()
-
         if not dst_ds.table_exists():
             incremental = False
             dst_ds.create()
@@ -24,7 +20,7 @@ def sync(
         if incremental:
             sync_table_spec = dst_ds.get_sync_table_spec()
 
-            after = cache.get_latest_incremental_col_values()
+            after = dst_ds.get_increasing_col_values()
 
             return _incremental_refresh(
                 src_ds=src_ds,
@@ -48,12 +44,12 @@ def _full_refresh(
     start = datetime.datetime.now()
     dst_ds.truncate()
     src_rows = src_ds.fetch_rows(col_names=None, after=None)
-    result = dst_ds.upsert_rows(src_rows)
+    dst_ds.upsert_rows(src_rows)
     execution_millis = int((datetime.datetime.now() - start).total_seconds() * 1000)
     return data.SyncResult.succeeded(
-        rows_added=result["rows_added"],
+        rows_added=len(src_rows),
         rows_deleted=0,
-        rows_updated=result["rows_updated"],
+        rows_updated=0,
         execution_millis=execution_millis,
     )
 
@@ -78,7 +74,6 @@ def _incremental_refresh(
 
     start_time = datetime.datetime.now()
 
-    result: dict[str, int] = {}
     if sync_table_spec.compare_cols:
         row_diff_cols = sync_table_spec.compare_cols.union(src_table.pk)
 
@@ -95,9 +90,10 @@ def _incremental_refresh(
             col_names=None,
             keys=set(row_diff.added.keys()).union(row_diff.updated.keys()),
         )
-        result |= dst_ds.upsert_rows(upsert_rows)
 
-        result["rows_deleted"] = dst_ds.delete_rows(keys=set(row_diff.deleted.keys()))
+        dst_ds.upsert_rows(upsert_rows)
+
+        dst_ds.delete_rows(keys=set(row_diff.deleted.keys()))
     else:
         src_rows = src_ds.fetch_rows(col_names=None, after=after)
         dst_rows = dst_ds.fetch_rows(col_names=None, after=after)
@@ -108,12 +104,10 @@ def _incremental_refresh(
             key_cols=src_table.pk,
         )
 
-        result |= dst_ds.upsert_rows(
+        dst_ds.upsert_rows(
             list(row_diff.added.values()) +
             list(src_row for src_row, dst_row in row_diff.updated.values())
         )
-
-        result["rows_deleted"] = dst_ds.delete_rows(keys=set(row_diff.deleted.keys()))
 
     execution_millis = int((datetime.datetime.now() - start_time).total_seconds() * 1000)
 

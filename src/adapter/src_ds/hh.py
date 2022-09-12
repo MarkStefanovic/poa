@@ -12,13 +12,13 @@ class HHSrcTable(OdbcSrcDs):
     def __init__(
         self,
         *,
-        cache: data.Cache,
         cur: pyodbc.Cursor,
+        db_name: str,
         schema_name: str,
         table_name: str,
         pk_cols: tuple[str],
     ):
-        super().__init__(cache=cache, cur=cur, schema_name=schema_name, table_name=table_name)
+        super().__init__(cur=cur, db_name=db_name, schema_name=schema_name, table_name=table_name)
 
         self._pk_cols = pk_cols
 
