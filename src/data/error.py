@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 __all__ = ("PoaError", "TableDoesntExist")
 
 
@@ -14,13 +16,9 @@ class SyncTableSpecNotFound(PoaError):
 
         super().__init__(f"A SyncTableSpec was not found for, {full_table_name}.")
 
-        self._db_name = db_name
-        self._schema_name = schema_name
-        self._table_name = table_name
-
 
 class TableDoesntExist(PoaError):
-    def __init__(self, *, schema_name: str, table_name: str):
+    def __init__(self, *, schema_name: str | None, table_name: str):
         if schema_name:
             full_table_name = f"{schema_name}.{table_name}"
         else:
@@ -28,5 +26,7 @@ class TableDoesntExist(PoaError):
 
         super().__init__(f"The table, {full_table_name}, doesn't exist.")
 
-        self._schema_name = schema_name
-        self._table_name = table_name
+
+class UnrecognizedDatabaseAPI(PoaError):
+    def __init__(self, *, api: str):
+        super().__init__(f"The database api specified, {api}, was not recognized.")

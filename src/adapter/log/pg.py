@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from loguru import logger
 
 from src import data
@@ -34,8 +36,20 @@ class PgLog(data.Log):
     def sync_skipped(self, *, sync_id: int, reason: str) -> None:
         pass
 
-    def sync_started(self, *, src_ds_name: str, src_schema_name: str | None, src_table_name: str) -> int:
-        pass
+    def sync_started(self, *, src_db_name: str, src_schema_name: str | None, src_table_name: str, incremental: bool) -> int:
+        with self._cursor_provider.open() as cur:
+            cur.execute(
+                """
+                SELECT * FROM poa.sync_started (
+                    p_src_db_name := %(src_db_name)s
+                ,   p_src_schema_name := %(src_schema_name)s
+                ,   p_src_table_name := %(src_table_name)s
+                ,   p_incremental := %(incremental)s
+                );
+                """,
+                {"src_db_name": src_db_name, "src_schema_name": src_schema_name, "src_table_name": src_table_name, "incremental": incremental},
+            )
+            return cur.fetchone()["sync_started"]
 
     def sync_succeeded(self, *, sync_id: int, execution_millis: int) -> None:
         pass

@@ -8,8 +8,13 @@ from src.adapter.dst_ds.pg import PgDstDs
 __all__ = ("create",)
 
 
-def create(*, api: data.API, cur: typing.Any, table: data.Table) -> data.DstDs:
+def create(*, api: data.API, cur: typing.Any, dst_db_name: str, dst_schema_name: str, src_table: data.Table) -> data.DstDs:
     if api == data.API.PSYCOPG2:
-        return PgDstDs(cur=typing.cast(RealDictCursor, cur), table=table)
+        return PgDstDs(
+            cur=typing.cast(RealDictCursor, cur),
+            dst_db_name=dst_db_name,
+            dst_schema_name=dst_schema_name,
+            src_table=src_table,
+        )
 
     raise NotImplementedError(f"The api specified, {api!s}, does not have an AbstractDstTable implementation.")

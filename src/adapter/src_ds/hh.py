@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import dataclasses
 
 import pyodbc
@@ -5,18 +7,18 @@ import pyodbc
 from src import data
 from src.adapter.src_ds.odbc import OdbcSrcDs
 
-__all__ = ("HHSrcTable",)
+__all__ = ("HHSrcDs",)
 
 
-class HHSrcTable(OdbcSrcDs):
+class HHSrcDs(OdbcSrcDs):
     def __init__(
         self,
         *,
         cur: pyodbc.Cursor,
         db_name: str,
-        schema_name: str,
+        schema_name: str | None,
         table_name: str,
-        pk_cols: tuple[str],
+        pk_cols: tuple[str, ...],
     ):
         super().__init__(cur=cur, db_name=db_name, schema_name=schema_name, table_name=table_name)
 

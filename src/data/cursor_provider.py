@@ -1,12 +1,12 @@
 import abc
+import contextlib
 import typing
 
-__all__ = ("CursorProvider", "CursorType")
-
-CursorType = typing.TypeVar("CursorType")
+__all__ = ("CursorProvider",)
 
 
-class CursorProvider(abc.ABC, typing.Generic[CursorType]):
+class CursorProvider(abc.ABC):
+    @contextlib.contextmanager
     @abc.abstractmethod
-    def open(self) -> typing.Generator[CursorType, None, None]:
+    def open(self) -> typing.Generator[typing.Any, None, None]:
         raise NotImplementedError

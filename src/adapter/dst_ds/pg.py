@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import dataclasses
 import itertools
 import operator
@@ -13,24 +15,27 @@ __all__ = ("PgDstDs",)
 
 # noinspection SqlDialectInspection,SqlNoDataSourceInspection,SqlResolve
 class PgDstDs(data.DstDs):
-    def __init__(self, *, cur: RealDictCursor, db_name: str, table: data.Table):
+    def __init__(self, *, cur: RealDictCursor, dst_db_name: str, dst_schema_name: str | None, src_table: data.Table):
         self._cur = cur
-        self._src_table = table
+        self._dst_db_name = dst_db_name
+        self._dst_schema_name = dst_schema_name
+        self._src_table = src_table
 
-        if table.schema_name:
-            dst_table_name = f"{table.db_name}_{table.schema_name}_{table.table_name}"
+        if src_table.schema_name:
+            dst_table_name = f"{src_table.db_name}_{src_table.schema_name}_{src_table.table_name}"
         else:
-            dst_table_name = f"{table.db_name}_{table.table_name}"
+            dst_table_name = f"{src_table.db_name}_{src_table.table_name}"
 
         self._dst_table = dataclasses.replace(
-            table,
-            db_name=db_name,
-            schema_name="poa",
+            src_table,
+            db_name=self._dst_db_name,
+            schema_name=self._dst_schema_name,
             table_name=dst_table_name,
         )
 
     def add_table_def(self, /, table: data.Table) -> None:
-        TODO
+        # TODO
+        pass
 
     def create(self) -> None:
         full_table_name = _generate_full_table_name(
@@ -53,8 +58,9 @@ class PgDstDs(data.DstDs):
         self._cur.execute(f"CREATE INDEX ix_{self._dst_table.table_name}_poa_ts ON {full_table_name} (poa_ts DESC);")
         self._cur.execute(f"CREATE INDEX ix_{self._dst_table.table_name}_poa_op ON {full_table_name} (poa_op);")
         sync_table_spec = self.get_sync_table_spec()
-        for col in sync_table_spec.increasing_cols:
-            self._cur.execute(f"CREATE INDEX ix_{self._dst_table.table_name}_{col} ON {full_table_name} ({_wrap_name(col)} DESC);")
+        if sync_table_spec.increasing_cols:
+            for col in sync_table_spec.increasing_cols:
+                self._cur.execute(f"CREATE INDEX ix_{self._dst_table.table_name}_{col} ON {full_table_name} ({_wrap_name(col)} DESC);")
 
     def delete_rows(self, /, keys: set[data.RowKey]) -> None:
         if keys:
@@ -103,19 +109,20 @@ class PgDstDs(data.DstDs):
         if sorted_after:
             sql += "\nWHERE\n  " + "\n  OR ".join(f"{_wrap_name(key)} > %({key})s" for key, val in sorted_after)
         self._cur.execute(sql, params)
-        return self._cur.fetchall()  # type: ignore
+        return self._cur.fetchall()
 
     def get_increasing_col_values(self) -> dict[str, typing.Hashable] | None:
         if sync_table_spec := self.get_sync_table_spec():
-            full_table_name = _generate_full_table_name(schema_name=self._dst_table.schema_name, table_name=self._dst_table.table_name)
-            max_values = {}
-            for col in sorted(sync_table_spec.increasing_cols):
-                self._cur.execute(f"SELECT MAX({_wrap_name(col)}) AS v FROM {full_table_name}")
-                value = self._cur.fetchone()["v"]  # noqa
-                if value is not None:
-                    max_values[col] = value
-            if max_values:
-                return max_values
+            if sync_table_spec.increasing_cols:
+                full_table_name = _generate_full_table_name(schema_name=self._dst_table.schema_name, table_name=self._dst_table.table_name)
+                max_values = {}
+                for col in sorted(sync_table_spec.increasing_cols):
+                    self._cur.execute(f"SELECT MAX({_wrap_name(col)}) AS v FROM {full_table_name}")
+                    value = self._cur.fetchone()["v"]  # noqa
+                    if value is not None:
+                        max_values[col] = value
+                if max_values:
+                    return max_values
         return None
 
     def get_row_count(self) -> int:
@@ -153,12 +160,12 @@ class PgDstDs(data.DstDs):
                 increasing_cols=increasing_cols,
                 skip_if_row_counts_match=row["skip_if_row_counts_match"],
             )
-
-        raise data.error.SyncTableSpecNotFound(
-            db_name=self._src_table.db_name,
-            schema_name=self._src_table.schema_name,
-            table_name=self._src_table.table_name,
-        )
+        else:
+            raise data.error.SyncTableSpecNotFound(
+                db_name=self._src_table.db_name,
+                schema_name=self._src_table.schema_name,
+                table_name=self._src_table.table_name,
+            )
 
     def get_table_def(self) -> data.Table:
         self._cur.execute(
@@ -168,12 +175,12 @@ class PgDstDs(data.DstDs):
             """,
             {"src_db_name": self._src_table.db_name, "src_schema_name": self._src_table.schema_name, " src_table_name": self._src_table.table_name},
         )
-        result = self._cur.fetchall()
-        col_defs = [
-            data.Column(name=row["col_name"], data_type=)
-            for row in result
-        ]
-        TODO
+        # result = self._cur.fetchall()
+        # col_defs = [
+        #     data.Column(name=row["col_name"], data_type=)
+        #     for row in result
+        # ]
+        # TODO
 
     def table_exists(self) -> bool:
         self._cur.execute(
@@ -255,8 +262,8 @@ def _generate_column_definition(*, col: data.Column) -> str:
         data.DataType.Float: lambda: f"{col_name} FLOAT {nullable}",
         data.DataType.Int: lambda: f"{col_name} INT {nullable}",
         data.DataType.Text: lambda: f"{col_name} TEXT {nullable}",
-        data.DataType.Timestamp: lambda: f"{col_name} TIMESTAMP(3) {nullable}",
-        data.DataType.TimestampTZ: lambda: f"{col_name} TIMESTAMPTZ(3) {nullable}",
+        data.DataType.Timestamp: lambda: f"{col_name} TIMESTAMP {nullable}",
+        data.DataType.TimestampTZ: lambda: f"{col_name} TIMESTAMPTZ {nullable}",
         data.DataType.UUID: lambda: f"{col_name} UUID {nullable}",
     }[col.data_type]()
 

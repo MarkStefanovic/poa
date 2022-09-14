@@ -3,7 +3,7 @@ import os
 import pathlib
 import sys
 
-__all__ = ("config_path", "log_folder")
+__all__ = ("get_config_path", "get_log_folder")
 
 
 @functools.lru_cache(maxsize=1)

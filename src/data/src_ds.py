@@ -26,5 +26,5 @@ class SrcDs(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def table_exists(self) -> Table:
+    def table_exists(self) -> bool:
         raise NotImplementedError

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import abc
 
 __all__ = ("Log",)
@@ -17,7 +19,7 @@ class Log(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def sync_started(self, *, src_ds_name: str, src_schema_name: str | None, src_table_name: str) -> int:
+    def sync_started(self, *, src_db_name: str, src_schema_name: str | None, src_table_name: str, incremental: bool) -> int:
         raise NotImplementedError
 
     @abc.abstractmethod

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import datetime
 import typing
 
@@ -65,9 +67,9 @@ def _incremental_refresh(
         after = None
 
     if sync_table_spec.skip_if_row_counts_match:
-        src_rows = src_ds.get_row_count()
-        dst_rows = dst_ds.get_row_count()
-        if src_rows == dst_rows:
+        src_row_ct = src_ds.get_row_count()
+        dst_row_ct = dst_ds.get_row_count()
+        if src_row_ct == dst_row_ct:
             return data.SyncResult.skipped(reason="row counts match.")
 
     src_table = src_ds.get_table()
@@ -75,10 +77,10 @@ def _incremental_refresh(
     start_time = datetime.datetime.now()
 
     if sync_table_spec.compare_cols:
-        row_diff_cols = sync_table_spec.compare_cols.union(src_table.pk)
+        min_cols = sync_table_spec.compare_cols.union(src_table.pk)
 
-        min_src_rows = src_ds.fetch_rows(col_names=row_diff_cols, after=after)
-        min_dst_rows = dst_ds.fetch_rows(col_names=row_diff_cols, after=after)
+        min_src_rows = src_ds.fetch_rows(col_names=min_cols, after=None)
+        min_dst_rows = dst_ds.fetch_rows(col_names=min_cols, after=None)
 
         row_diff = data.compare_rows(
             src_rows=min_src_rows,

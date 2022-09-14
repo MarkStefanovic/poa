@@ -1,3 +1,4 @@
+import contextlib
 import typing
 
 import pyodbc
@@ -7,12 +8,13 @@ from src import data
 __all__ = ("OdbcCursorProvider",)
 
 
-class OdbcCursorProvider(data.CursorProvider[pyodbc.Cursor]):
+class OdbcCursorProvider(data.CursorProvider):
     def __init__(self, *, connection_str: str, api: data.API):
         self._connection_str = connection_str
         self._api = api
 
-    def open(self) -> typing.Generator[data.CursorType, None, None]:
+    @contextlib.contextmanager
+    def open(self) -> typing.Generator[pyodbc.Cursor, None, None]:
         if self._api == data.API.HH:
             autocommit = True
         else:

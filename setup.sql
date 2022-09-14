@@ -316,7 +316,7 @@ LANGUAGE sql
 AS $$
     SELECT
         cd.col_name
-    ,   cd.col_data_type
+    ,   cd.col_data_type::TEXT AS col_data_type
     ,   cd.col_length
     ,   cd.col_precision
     ,   cd.col_scale

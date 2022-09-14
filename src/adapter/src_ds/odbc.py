@@ -34,7 +34,7 @@ class OdbcSrcDs(data.SrcDs):
         self._wrapper = wrapper
 
         if self._schema_name:
-            self._full_table_name = f"{wrapper(schema_name)}.{wrapper(table_name)}"
+            self._full_table_name = f"{wrapper(self._schema_name)}.{wrapper(table_name)}"
         else:
             self._full_table_name = wrapper(table_name)
 
@@ -171,7 +171,7 @@ def _get_data_type(row: pyodbc.Row, /) -> data.DataType:
         }[row.data_type]
 
 
-def _get_key_cols(*, cur: pyodbc.Cursor, schema_name: str | None, table_name: str) -> tuple[str]:
+def _get_key_cols(*, cur: pyodbc.Cursor, schema_name: str | None, table_name: str) -> tuple[str, ...]:
     return tuple(
         typing.cast(str, col.column_name.lower())
         for col in cur.primaryKeys(table_name, schema=schema_name)
