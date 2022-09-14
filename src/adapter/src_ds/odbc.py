@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import datetime
 import itertools
 import typing
@@ -56,7 +58,11 @@ class OdbcSrcDs(data.SrcDs):
         if sorted_after:
             sql += "\nWHERE\n  " + "\n  OR ".join(f"{self._wrapper(key)} > ?" for key, val in sorted_after)
 
-        self._cur.execute(sql, params=params)
+        if params:
+            self._cur.execute(sql, params)
+        else:
+            self._cur.execute(sql)
+
         return [dict(zip(cols, row)) for row in self._cur.fetchall()]
 
     def fetch_rows_by_key(self, *, col_names: set[str] | None, keys: set[data.RowKey]) -> list[data.Row]:
@@ -137,31 +143,31 @@ def _get_data_type(row: pyodbc.Row, /) -> data.DataType:
         return data.DataType.Bool
     else:
         return {
-            -10: lambda: data.DataType.Text,  # 'text'
-            -11: lambda: data.DataType.UUID,  # 'uuid'
-            -1: lambda: data.DataType.Text,  # 'text'
-            -3: lambda: data.DataType.Text,  # 'bytea'
-            -4: lambda: data.DataType.Text,  # 'bytea'
-            -5: lambda: data.DataType.BigInt,  # 'int8'
-            -6: lambda: data.DataType.Int,  # 'int2'
-            -7: lambda: data.DataType.Bool,  # 'bool'
-            -8: lambda: data.DataType.Text,  # 'char'
-            -9: lambda: data.DataType.Text,  # 'varchar'
-            10: lambda: data.DataType.Timestamp,  # 'time'
-            11: lambda: data.DataType.TimestampTZ,  # 'timestamptz'
-            12: lambda: data.DataType.Text,  # 'varchar'
-            1: lambda: data.DataType.Text,  # 'char'
-            2: lambda: data.DataType.Decimal,  # 'numeric'
-            3: lambda: data.DataType.Decimal,  # 'numeric'
-            4: lambda: data.DataType.Int,  # 'int4'
-            5: lambda: data.DataType.Int,  # 'int2'
-            6: lambda: data.DataType.Float,  # 'float8'
-            7: lambda: data.DataType.Float,  # 'float4'
-            8: lambda: data.DataType.BigFloat,  # 'float8'  # Double Precision in pg
-            91: lambda: data.DataType.Date,  # 'date'
-            92: lambda: data.DataType.Timestamp,  # 'time'
-            93: lambda: data.DataType.TimestampTZ,  # 'timestamptz'
-            9: lambda: data.DataType.Date,  # 'date'
+            -10: data.DataType.Text,  # 'text'
+            -11: data.DataType.UUID,  # 'uuid'
+            -1: data.DataType.Text,  # 'text'
+            -3: data.DataType.Text,  # 'bytea'
+            -4: data.DataType.Text,  # 'bytea'
+            -5: data.DataType.BigInt,  # 'int8'
+            -6: data.DataType.Int,  # 'int2'
+            -7: data.DataType.Bool,  # 'bool'
+            -8: data.DataType.Text,  # 'char'
+            -9: data.DataType.Text,  # 'varchar'
+            10: data.DataType.Timestamp,  # 'time'
+            11: data.DataType.TimestampTZ,  # 'timestamptz'
+            12: data.DataType.Text,  # 'varchar'
+            1:  data.DataType.Text,  # 'char'
+            2:  data.DataType.Decimal,  # 'numeric'
+            3:  data.DataType.Decimal,  # 'numeric'
+            4:  data.DataType.Int,  # 'int4'
+            5:  data.DataType.Int,  # 'int2'
+            6:  data.DataType.Float,  # 'float8'
+            7:  data.DataType.Float,  # 'float4'
+            8:  data.DataType.BigFloat,  # 'float8'  # Double Precision in pg
+            91: data.DataType.Date,  # 'date'
+            92: data.DataType.Timestamp,  # 'time'
+            93: data.DataType.TimestampTZ,  # 'timestamptz'
+            9:  data.DataType.Date,  # 'date'
         }[row.data_type]
 
 

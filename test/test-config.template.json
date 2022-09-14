@@ -1,3 +1,5 @@
 {
-  "test-db-connection-str": "host='localhost' dbname='testdb' user='postgres' password='secret'"
+  "hh-connection-str": "DSN=testdb",
+  "hh-schema-name": "test_schema",
+  "pg-connection-str": "host='localhost' dbname='testdb' user='postgres' password='secret'"
 }

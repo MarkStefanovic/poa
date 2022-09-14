@@ -24,5 +24,9 @@ class HHSrcTable(OdbcSrcDs):
 
     def get_table(self) -> data.Table:
         table_def = super().get_table()
-        return dataclasses.replace(table_def, pk=self._pk_cols)
+        col_defs = frozenset(
+            dataclasses.replace(col, nullable=False) if col.name in self._pk_cols else col
+            for col in table_def.columns
+        )
+        return dataclasses.replace(table_def, pk=self._pk_cols, columns=col_defs)
 

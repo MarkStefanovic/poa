@@ -7,6 +7,7 @@ channels:
 dependencies:
 - python>=3.10
 - pip
+- frozendict
 - loguru
 - mypy
 - pytest
@@ -14,5 +15,3 @@ dependencies:
 - pyinstaller
 - psycopg2-binary
 - typer
-- pip
-  - frozendict
