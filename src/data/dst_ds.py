@@ -4,11 +4,16 @@ import typing
 from src.data.row import Row
 from src.data.row_key import RowKey
 from src.data.sync_table_spec import SyncTableSpec
+from src.data.table import Table
 
 __all__ = ("DstDs",)
 
 
 class DstDs(abc.ABC):
+    @abc.abstractmethod
+    def add_table_def(self, /, table: Table) -> None:
+        raise NotImplementedError
+
     @abc.abstractmethod
     def create(self) -> None:
         raise NotImplementedError
@@ -31,6 +36,10 @@ class DstDs(abc.ABC):
 
     @abc.abstractmethod
     def get_sync_table_spec(self) -> SyncTableSpec:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def get_table_def(self) -> Table:
         raise NotImplementedError
 
     @abc.abstractmethod

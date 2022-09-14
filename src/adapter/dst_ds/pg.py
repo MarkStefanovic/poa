@@ -29,6 +29,9 @@ class PgDstDs(data.DstDs):
             table_name=dst_table_name,
         )
 
+    def add_table_def(self, /, table: data.Table) -> None:
+        TODO
+
     def create(self) -> None:
         full_table_name = _generate_full_table_name(
             schema_name=self._dst_table.schema_name,
@@ -156,6 +159,21 @@ class PgDstDs(data.DstDs):
             schema_name=self._src_table.schema_name,
             table_name=self._src_table.table_name,
         )
+
+    def get_table_def(self) -> data.Table:
+        self._cur.execute(
+            """
+            SELECT col_name, col_data_type, col_length, col_precision, col_scale, col_nullable
+            FROM poa.get_table_cols(p_src_db_name := %(src_db_name)s, p_src_schema_name := %(src_schema_name)s, p_src_table_name := %(src_table_name)s)
+            """,
+            {"src_db_name": self._src_table.db_name, "src_schema_name": self._src_table.schema_name, " src_table_name": self._src_table.table_name},
+        )
+        result = self._cur.fetchall()
+        col_defs = [
+            data.Column(name=row["col_name"], data_type=)
+            for row in result
+        ]
+        TODO
 
     def table_exists(self) -> bool:
         self._cur.execute(
