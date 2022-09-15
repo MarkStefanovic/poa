@@ -111,7 +111,7 @@ def test_get_increasing_col_values(pg_cursor_fixture: RealDictCursor, customer_t
         ,   ('2022-09-02', 3, '2022-08-09 +0', null, 'Bill', 'Button', 'B', 345.67, '', 'a', '2022-09-10 +0')
     """)
     ds = PgDstDs(cur=pg_cursor_fixture, dst_db_name="dst", src_table=customer_table_fixture)
-    rows = ds.get_increasing_col_values()
+    rows = ds.get_max_values()
     assert rows == {
         "date_added": datetime.datetime(2022, 9, 11, tzinfo=datetime.timezone.utc),
         "date_deleted": datetime.datetime(2022, 9, 10, tzinfo=datetime.timezone.utc),

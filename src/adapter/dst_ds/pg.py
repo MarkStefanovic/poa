@@ -33,6 +33,15 @@ class PgDstDs(data.DstDs):
             table_name=dst_table_name,
         )
 
+    def add_increasing_col_indices(self, /, increasing_cols: set[str]) -> None:
+        full_table_name = _generate_full_table_name(
+            schema_name=self._dst_table.schema_name,
+            table_name=self._dst_table.table_name,
+        )
+        for col in increasing_cols:
+            self._cur.execute(
+                f"CREATE INDEX ix_{self._dst_table.table_name}_{col} ON {full_table_name} ({_wrap_name(col)} DESC);")
+
     def add_table_def(self, /, table: data.Table) -> None:
         # TODO
         pass
@@ -57,10 +66,6 @@ class PgDstDs(data.DstDs):
         self._cur.execute(sql)
         self._cur.execute(f"CREATE INDEX ix_{self._dst_table.table_name}_poa_ts ON {full_table_name} (poa_ts DESC);")
         self._cur.execute(f"CREATE INDEX ix_{self._dst_table.table_name}_poa_op ON {full_table_name} (poa_op);")
-        sync_table_spec = self.get_sync_table_spec()
-        if sync_table_spec.increasing_cols:
-            for col in sync_table_spec.increasing_cols:
-                self._cur.execute(f"CREATE INDEX ix_{self._dst_table.table_name}_{col} ON {full_table_name} ({_wrap_name(col)} DESC);")
 
     def delete_rows(self, /, keys: set[data.RowKey]) -> None:
         if keys:
@@ -109,20 +114,21 @@ class PgDstDs(data.DstDs):
         if sorted_after:
             sql += "\nWHERE\n  " + "\n  OR ".join(f"{_wrap_name(key)} > %({key})s" for key, val in sorted_after)
         self._cur.execute(sql, params)
-        return self._cur.fetchall()
+        return self._cur.fetchall()  # noqa
 
-    def get_increasing_col_values(self) -> dict[str, typing.Hashable] | None:
-        if sync_table_spec := self.get_sync_table_spec():
-            if sync_table_spec.increasing_cols:
-                full_table_name = _generate_full_table_name(schema_name=self._dst_table.schema_name, table_name=self._dst_table.table_name)
-                max_values = {}
-                for col in sorted(sync_table_spec.increasing_cols):
-                    self._cur.execute(f"SELECT MAX({_wrap_name(col)}) AS v FROM {full_table_name}")
-                    value = self._cur.fetchone()["v"]  # noqa
-                    if value is not None:
-                        max_values[col] = value
-                if max_values:
-                    return max_values
+    def get_max_values(self, /, cols: set[str]) -> dict[str, typing.Hashable] | None:
+        full_table_name = _generate_full_table_name(
+            schema_name=self._dst_table.schema_name,
+            table_name=self._dst_table.table_name,
+        )
+        max_values = {}
+        for col in sorted(cols):
+            self._cur.execute(f"SELECT MAX({_wrap_name(col)}) AS v FROM {full_table_name}")
+            value = self._cur.fetchone()["v"]  # noqa
+            if value is not None:
+                max_values[col] = value
+        if max_values:
+            return max_values
         return None
 
     def get_row_count(self) -> int:
@@ -132,40 +138,6 @@ class PgDstDs(data.DstDs):
         )
         self._cur.execute(f"SELECT COUNT(*) AS ct FROM {full_table_name}")
         return self._cur.fetchone()["ct"]  # noqa
-
-    def get_sync_table_spec(self) -> data.SyncTableSpec:
-        self._cur.execute(
-            """
-            SELECT * FROM poa.get_sync_table_spec (
-                p_src_db_name := %(db_name)s
-            ,   p_src_schema_name := %(schema_name)s
-            ,   p_src_table_name := %(table_name)s
-            )
-            """,
-            {"db_name": self._src_table.db_name, "schema_name": self._src_table.schema_name, "table_name": self._src_table.table_name},
-        )
-        row: dict[str, typing.Any]
-        if row := self._cur.fetchone():
-            if compare_cols := row["compare_cols"]:
-                compare_cols = set(compare_cols)
-
-            if increasing_cols := row["increasing_cols"]:
-                increasing_cols = set(increasing_cols)
-
-            return data.SyncTableSpec(
-                db_name=self._src_table.db_name,
-                schema_name=self._src_table.schema_name,
-                table_name=self._src_table.table_name,
-                compare_cols=compare_cols,
-                increasing_cols=increasing_cols,
-                skip_if_row_counts_match=row["skip_if_row_counts_match"],
-            )
-        else:
-            raise data.error.SyncTableSpecNotFound(
-                db_name=self._src_table.db_name,
-                schema_name=self._src_table.schema_name,
-                table_name=self._src_table.table_name,
-            )
 
     def get_table_def(self) -> data.Table:
         self._cur.execute(

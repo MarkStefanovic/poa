@@ -3,7 +3,6 @@ import typing
 
 from src.data.row import Row
 from src.data.row_key import RowKey
-from src.data.sync_table_spec import SyncTableSpec
 from src.data.table import Table
 
 __all__ = ("DstDs",)
@@ -12,6 +11,10 @@ __all__ = ("DstDs",)
 class DstDs(abc.ABC):
     @abc.abstractmethod
     def add_table_def(self, /, table: Table) -> None:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def add_increasing_col_indices(self, /, increasing_cols: set[str]) -> None:
         raise NotImplementedError
 
     @abc.abstractmethod
@@ -27,15 +30,11 @@ class DstDs(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def get_increasing_col_values(self) -> dict[str, typing.Hashable] | None:
+    def get_max_values(self, /, cols: set[str]) -> dict[str, typing.Hashable] | None:
         raise NotImplementedError
 
     @abc.abstractmethod
     def get_row_count(self) -> int:
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def get_sync_table_spec(self) -> SyncTableSpec:
         raise NotImplementedError
 
     @abc.abstractmethod

@@ -12,5 +12,4 @@ from src.data.row import *
 from src.data.row_key import *
 from src.data.row_diff import *
 from src.data.sync_result import *
-from src.data.sync_table_spec import *
 from src.data.table import *
