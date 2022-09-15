@@ -30,17 +30,6 @@ CREATE TABLE poa.sync_success (
 ,   ts TIMESTAMPTZ(3) NOT NULL DEFAULT now()
 );
 
-CREATE TABLE poa.sync_table_spec (
-    sync_table_spec_id SERIAL PRIMARY KEY
-,   src_db_name TEXT NOT NULL
-,   src_schema_name TEXT NULL
-,   src_table_name TEXT NOT NULL
-,   compare_cols TEXT[] NULL CHECK (compare_cols IS NULL OR cardinality(compare_cols) > 0)
-,   increasing_cols TEXT[] NULL CHECK (increasing_cols IS NULL OR cardinality(increasing_cols) > 0)
-,   skip_if_row_counts_match BOOL NOT NULL
-,   UNIQUE (src_db_name, src_schema_name, src_table_name)
-);
-
 CREATE OR REPLACE PROCEDURE poa.sync_failed (
     p_sync_id INT
 ,   p_error_message TEXT
@@ -144,54 +133,6 @@ BEGIN
     );
 END;
 $$;
-
-CREATE OR REPLACE PROCEDURE poa.add_sync_table_spec (
-    p_src_db_name TEXT
-,   p_src_schema_name TEXT
-,   p_src_table_name TEXT
-,   p_compare_cols TEXT[] = NULL
-,   p_increasing_cols TEXT[] = NULL
-,   p_skip_if_row_counts_match BOOL = FALSE
-)
-LANGUAGE plpgsql
-AS $$
-BEGIN
-    ASSERT p_compare_cols IS NULL OR cardinality(p_compare_cols) > 0, 'If p_compare_cols is provided, then it must have at least 1 element.';
-    ASSERT p_increasing_cols IS NULL OR cardinality(p_increasing_cols) > 0, 'If p_increasing_cols is provided, then it must have at least 1 element.';
-
-    INSERT INTO poa.sync_table_spec
-        (src_db_name, src_schema_name, src_table_name, compare_cols, increasing_cols, skip_if_row_counts_match)
-    VALUES
-        (p_src_db_name, p_src_schema_name, p_src_table_name, p_compare_cols, p_increasing_cols, p_skip_if_row_counts_match)
-    ;
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION poa.get_sync_table_spec (
-    p_src_db_name TEXT
-,   p_src_schema_name TEXT
-,   p_src_table_name TEXT
-)
-RETURNS TABLE (
-    compare_cols TEXT[]
-,   increasing_cols TEXT[]
-,   skip_if_row_counts_match BOOL
-)
-LANGUAGE plpgsql
-AS $$
-BEGIN
-    RETURN QUERY
-    SELECT
-        sts.compare_cols
-    ,   sts.increasing_cols
-    ,   sts.skip_if_row_counts_match
-    FROM poa.sync_table_spec AS sts
-    WHERE
-        sts.src_db_name = p_src_db_name
-        AND sts.src_schema_name IS NOT DISTINCT FROM p_src_schema_name
-        AND sts.src_table_name = p_src_table_name
-    ;
-END;$$;
 
 CREATE TABLE poa.table_def (
     table_def_id SERIAL PRIMARY KEY

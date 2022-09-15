@@ -26,9 +26,14 @@ class HHSrcDs(OdbcSrcDs):
 
     def get_table(self) -> data.Table:
         table_def = super().get_table()
-        col_defs = frozenset(
+        col_defs = (
             dataclasses.replace(col, nullable=False) if col.name in self._pk_cols else col
             for col in table_def.columns
         )
-        return dataclasses.replace(table_def, pk=self._pk_cols, columns=col_defs)
+        col_defs = (
+            dataclasses.replace(col, data_type=data.DataType.Timestamp)
+            if col.data_type == data.DataType.TimestampTZ else col
+            for col in col_defs
+        )
+        return dataclasses.replace(table_def, pk=self._pk_cols, columns=frozenset(col_defs))
 
