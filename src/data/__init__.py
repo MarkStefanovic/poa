@@ -7,6 +7,7 @@ from src.data.src_ds import *
 from src.data.column import *
 from src.data.compare_rows import *
 from src.data.data_type import *
+from src.data.frozen_dict import *
 from src.data.log import *
 from src.data.row import *
 from src.data.row_key import *

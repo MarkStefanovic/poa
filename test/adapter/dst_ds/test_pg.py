@@ -1,7 +1,6 @@
 import datetime
 
 import pytest
-from frozendict import frozendict
 from psycopg2._psycopg import connection, cursor
 from psycopg2.extras import RealDictCursor
 
@@ -51,7 +50,7 @@ def test_delete_rows(pg_cursor_fixture: RealDictCursor, customer_table_fixture: 
         ,   ('2022-09-02', 3, '2022-08-09 +0', null, 'Bill', 'Button', 'B', 345.67, '', 'a', '2022-09-10 +0')
     """)
     ds = PgDstDs(cur=pg_cursor_fixture, dst_db_name="dst", src_table=customer_table_fixture)
-    ds.delete_rows(keys={frozendict({"customer_id": 2})})
+    ds.delete_rows(keys={data.FrozenDict({"customer_id": 2})})
     pg_cursor_fixture.execute("SELECT poa_op FROM poa.src_sales_customer WHERE customer_id = 2")
     assert pg_cursor_fixture.fetchone()["poa_op"] == "d", "customer_id = 2 should have been deleted, but it wasn't."  # noqa
 

@@ -38,5 +38,5 @@ exe = EXE(
     upx_exclude=[],
     runtime_tmpdir=None,
     console=False,
-    icon="assets/icons/app.ico"
+    icon="assets/app.ico"
 )

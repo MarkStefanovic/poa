@@ -40,7 +40,9 @@ class PgDstDs(data.DstDs):
         )
         for col in increasing_cols:
             self._cur.execute(
-                f"CREATE INDEX ix_{self._dst_table.table_name}_{col} ON {full_table_name} ({_wrap_name(col)} DESC);")
+                f"CREATE INDEX IF NOT EXISTS ix_{self._dst_table.table_name}_{col} "
+                f"ON {full_table_name} ({_wrap_name(col)} DESC);"
+            )
 
     def add_table_def(self, /, table: data.Table) -> None:
         # TODO
@@ -86,6 +88,13 @@ class PgDstDs(data.DstDs):
                     AND poa_op <> 'd'
             """).strip()
             self._cur.executemany(sql, keys)
+
+    def drop_table(self) -> None:
+        full_table_name = _generate_full_table_name(
+            schema_name=self._dst_table.schema_name,
+            table_name=self._dst_table.table_name,
+        )
+        self._cur.execute(f"DROP TABLE IF EXISTS {full_table_name}")
 
     def fetch_rows(
         self,

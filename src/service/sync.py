@@ -16,9 +16,14 @@ def sync(
     compare_cols: set[str] | None,
     increasing_cols: set[str] | None,
     skip_if_row_counts_match: bool,
+    recreate: bool,
 ) -> data.SyncResult:
     try:
-        if not dst_ds.table_exists():
+        if recreate:
+            incremental = False
+            dst_ds.drop_table()
+            dst_ds.create()
+        elif not dst_ds.table_exists():
             incremental = False
             dst_ds.create()
 

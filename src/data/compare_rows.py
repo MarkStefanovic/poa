@@ -1,7 +1,6 @@
 import typing
 
-from frozendict import frozendict  # type: ignore
-
+from src.data.frozen_dict import FrozenDict
 from src.data.row import Row
 from src.data.row_diff import RowDiff
 from src.data.row_key import RowKey
@@ -22,7 +21,7 @@ def compare_rows(
 
 def _index_rows(*, key_cols: typing.Iterable[str], rows: typing.Iterable[Row]) -> dict[RowKey, Row]:
     return {
-        frozendict({col: row[col] for col in key_cols}): row
+        FrozenDict({col: row[col] for col in key_cols}): row
         for row in rows
     }
 

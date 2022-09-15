@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import abc
 import typing
 
@@ -23,6 +25,10 @@ class DstDs(abc.ABC):
 
     @abc.abstractmethod
     def delete_rows(self, *, keys: set[RowKey]) -> None:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def drop_table(self) -> None:
         raise NotImplementedError
 
     @abc.abstractmethod

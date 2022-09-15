@@ -1,8 +1,8 @@
 import typing
 
-from frozendict import frozendict  # type: ignore
+from src.data.frozen_dict import FrozenDict
 
 __all__ = ("RowKey",)
 
 
-RowKey: typing.TypeAlias = frozendict
+RowKey: typing.TypeAlias = FrozenDict

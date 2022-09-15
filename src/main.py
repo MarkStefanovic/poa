@@ -50,6 +50,7 @@ def sync(
     compare_cols: set[str] | None,
     increasing_cols: set[str] | None,
     skip_if_row_counts_match: bool,
+    recreate: bool,
     log_folder: pathlib.Path,
 ) -> None:
     try:
@@ -64,7 +65,8 @@ def sync(
         loguru.logger.info(
             f"Starting sync using the following parameters:\n  {src_db_name=!r}\n  "
             f"{dst_db_name=!r}\n  {src_schema_name=!r}\n  {src_table_name=!r}\n  "
-            f"{incremental=!r}\n  {pk=!r}\n  {compare_cols=!r}\n  {increasing_cols=!r}\n  {skip_if_row_counts_match=!r}"
+            f"{incremental=!r}\n  {pk=!r}\n  {compare_cols=!r}\n  {increasing_cols=!r}\n  "
+            f"{skip_if_row_counts_match=!r}\n  {recreate=!r}"
         )
 
         config_file = adapter.fs.get_config_path()
@@ -114,6 +116,7 @@ def sync(
                     compare_cols=compare_cols,
                     increasing_cols=increasing_cols,
                     skip_if_row_counts_match=skip_if_row_counts_match,
+                    recreate=recreate,
                 )
                 if result.status == "succeeded":
                     execution_millis = int((datetime.datetime.now() - start).total_seconds() * 1000)
@@ -164,6 +167,7 @@ if __name__ == '__main__':
         full_sync_parser.add_argument("--src-schema", type=str, required=True)
         full_sync_parser.add_argument("--src-table", type=str, required=True)
         full_sync_parser.add_argument("--pk", nargs="+")
+        full_sync_parser.add_argument("--recreate", action="store_true")
 
         incremental_sync_parser.add_argument("--src-db", type=str, required=True)
         incremental_sync_parser.add_argument("--dst-db", type=str, required=True)
@@ -200,6 +204,7 @@ if __name__ == '__main__':
                 compare_cols=None,
                 increasing_cols=None,
                 skip_if_row_counts_match=False,
+                recreate=args.recreate,
                 log_folder=logging_folder,
             )
         elif args.command == "incremental-sync":
@@ -228,6 +233,7 @@ if __name__ == '__main__':
                 compare_cols=args.compare,
                 increasing_cols=args.increasing,
                 skip_if_row_counts_match=args.skip_if_row_counts_match,
+                recreate=False,
                 log_folder=logging_folder,
             )
     except Exception as e:
