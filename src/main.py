@@ -193,7 +193,7 @@ if __name__ == '__main__':
             sync(
                 src_db_name=args.src_db,
                 dst_db_name=args.dst_db,
-                src_schema_name=args.src_schmea,
+                src_schema_name=args.src_schema,
                 src_table_name=args.src_table,
                 pk=args.pk,
                 incremental=False,
@@ -221,7 +221,7 @@ if __name__ == '__main__':
             sync(
                 src_db_name=args.src_db,
                 dst_db_name=args.dst_db,
-                src_schema_name=args.src_schmea,
+                src_schema_name=args.src_schema,
                 src_table_name=args.src_table,
                 pk=args.pk,
                 incremental=True,
