@@ -116,8 +116,9 @@ class PgDstDs(data.DstDs):
         if after:
             sorted_after = sorted((key, val) for key, val in after.items() if val is not None)
             params = dict(sorted_after)
+        sql += "\nWHERE\n  poa_op <> 'd'"
         if sorted_after:
-            sql += "\nWHERE\n  " + "\n  OR ".join(f"{_wrap_name(key)} > %({key})s" for key, val in sorted_after)
+            sql += "\n  AND (" + "\n    OR ".join(f"{_wrap_name(key)} > %({key})s" for key, val in sorted_after) + "\n)"
         self._cur.execute(sql, params)
         return self._cur.fetchall()  # noqa
 
