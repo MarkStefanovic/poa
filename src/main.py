@@ -212,11 +212,10 @@ def sync(
 
 
 if __name__ == '__main__':
-    if getattr(sys, "frozen", False):
-        loguru.logger.add(sys.stderr, format="{time} {level} {message}", level="DEBUG")
-
     logging_folder = adapter.fs.get_log_folder()
 
+    loguru.logger.remove()
+    loguru.logger.add(sys.stderr, level="INFO")
     loguru.logger.add(logging_folder / f"error.log", rotation="5 MB", retention="7 days", level="ERROR")
 
     try:
