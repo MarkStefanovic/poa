@@ -17,4 +17,4 @@ def create(*, api: data.API, cur: typing.Any, dst_db_name: str, dst_schema_name:
             src_table=src_table,
         )
 
-    raise NotImplementedError(f"The api specified, {api!s}, does not have an AbstractDstTable implementation.")
+    raise NotImplementedError(f"The api specified, {api!s}, does not have an DstDs implementation.")

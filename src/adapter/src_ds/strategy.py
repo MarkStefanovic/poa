@@ -26,4 +26,4 @@ def create(
     elif api == data.API.PYODBC:
         return OdbcSrcDs(cur=typing.cast(pyodbc.Cursor, cur), db_name=db_name, schema_name=schema_name, table_name=table_name)
     else:
-        raise NotImplementedError(f"The api specified, {api}, does not have an AbstractDstTable implementation.")
+        raise NotImplementedError(f"The api specified, {api}, does not have an SrcDs implementation.")

@@ -30,26 +30,70 @@ class PgLog(data.Log):
                     {"sync_id": sync_id, "reason": reason},
                 )
         except Exception as e:
-            logger.exception(e)
+            self.error(
+                f"An error occurred while running sync_failed({sync_id=!r}, {reason=!r}): "
+                f"{e!s}\n{e.__traceback__}"
+            )
             raise
 
     def sync_skipped(self, *, sync_id: int, reason: str) -> None:
-        pass
-
-    def sync_started(self, *, src_db_name: str, src_schema_name: str | None, src_table_name: str, incremental: bool) -> int:
-        with self._cursor_provider.open() as cur:
-            cur.execute(
-                """
-                SELECT * FROM poa.sync_started (
-                    p_src_db_name := %(src_db_name)s
-                ,   p_src_schema_name := %(src_schema_name)s
-                ,   p_src_table_name := %(src_table_name)s
-                ,   p_incremental := %(incremental)s
-                );
-                """,
-                {"src_db_name": src_db_name, "src_schema_name": src_schema_name, "src_table_name": src_table_name, "incremental": incremental},
+        try:
+            with self._cursor_provider.open() as cur:
+                cur.execute(
+                    "CALL poa.sync_skipped(p_sync_id := %(sync_id)s, p_skip_reason := %(reason)s);",
+                    {"sync_id": sync_id, "reason": reason},
+                )
+        except Exception as e:
+            self.error(
+                f"An error occurred while running sync_skipped({sync_id=!r}, {reason=!r}): "
+                f"{e!s}\n{e.__traceback__}"
             )
-            return cur.fetchone()["sync_started"]
+            raise
+
+    def sync_started(
+        self,
+        *,
+        src_db_name: str,
+        src_schema_name: str | None,
+        src_table_name: str,
+        incremental: bool,
+    ) -> int:
+        try:
+            with self._cursor_provider.open() as cur:
+                cur.execute(
+                    """
+                    SELECT * FROM poa.sync_started (
+                        p_src_db_name := %(src_db_name)s
+                    ,   p_src_schema_name := %(src_schema_name)s
+                    ,   p_src_table_name := %(src_table_name)s
+                    ,   p_incremental := %(incremental)s
+                    );
+                    """,
+                    {
+                        "src_db_name": src_db_name,
+                        "src_schema_name": src_schema_name,
+                        "src_table_name": src_table_name,
+                        "incremental": incremental,
+                    },
+                )
+                return cur.fetchone()["sync_started"]
+        except Exception as e:
+            self.error(
+                f"An error occurred while running sync_started({src_db_name=!r}, {src_schema_name=!r}, "
+                f"{src_table_name=!r}, {incremental=!r}): {e!s}\n{e.__traceback__}"
+            )
+            raise
 
     def sync_succeeded(self, *, sync_id: int, execution_millis: int) -> None:
-        pass
+        try:
+            with self._cursor_provider.open() as cur:
+                cur.execute(
+                    "CALL poa.sync_succeeded(p_sync_id := %(sync_id)s, p_execution_millis := %(execution_millis)s);",
+                    {"sync_id": sync_id, "execution_millis": execution_millis},
+                )
+        except Exception as e:
+            self.error(
+                f"An error occurred while running sync_succeeded({sync_id=!r}, {execution_millis=!r}): "
+                f"{e!s}\n{e.__traceback__}"
+            )
+            raise

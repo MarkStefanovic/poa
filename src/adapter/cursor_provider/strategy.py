@@ -11,4 +11,4 @@ def create(*, api: data.API, connection_str: str) -> data.CursorProvider:
     elif api == data.API.PSYCOPG2:
         return PgCursorProvider(connection_str=connection_str)
     else:
-        raise NotImplementedError(f"data.CursorProvider is not implemented for the {api!s} api.")
+        raise NotImplementedError(f"CursorProvider is not implemented for the {api!s} api.")

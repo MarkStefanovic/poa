@@ -136,13 +136,13 @@ $$;
 
 CREATE TABLE poa.table_def (
     table_def_id SERIAL PRIMARY KEY
-,   src_db_name TEXT NOT NULL CHECK (length(src_db_name) > 0)
-,   src_schema_name TEXT NULL CHECK (src_schema_name IS NULL OR length(src_schema_name) > 0)
-,   src_table_name TEXT NOT NULL CHECK (length(src_table_name) > 0)
+,   db_name TEXT NOT NULL CHECK (length(db_name) > 0)
+,   schema_name TEXT NULL CHECK (schema_name IS NULL OR length(schema_name) > 0)
+,   table_name TEXT NOT NULL CHECK (length(table_name) > 0)
 ,   pk_cols TEXT[] NOT NULL CHECK (cardinality(pk_cols) > 0)
 ,   op CHAR(1) NOT NULL CHECK (op IN ('a', 'd', 'u'))
 ,   ts TIMESTAMPTZ(3) NOT NULL DEFAULT now()
-,   UNIQUE (src_db_name, src_schema_name, src_table_name)
+,   UNIQUE (db_name, schema_name, table_name)
 );
 
 CREATE TYPE poa.col_def_data_type_option AS ENUM (
@@ -173,7 +173,7 @@ CREATE TABLE poa.col_def (
 ,   UNIQUE (table_def_id, col_name)
 );
 
-CREATE OR REPLACE FUNCTION poa.upsert_col_def(
+CREATE OR REPLACE FUNCTION poa.add_col_def(
     p_table_def_id INT
 ,   p_col_name TEXT
 ,   p_col_data_type TEXT
@@ -217,20 +217,20 @@ AS $$
     RETURNING col_def_id
 $$;
 
-CREATE OR REPLACE FUNCTION poa.upsert_table_def(
-    p_src_db_name TEXT
-,   p_src_schema_name TEXT
-,   p_src_table_name TEXT
+CREATE OR REPLACE FUNCTION poa.add_table_def(
+    p_db_name TEXT
+,   p_schema_name TEXT
+,   p_table_name TEXT
 ,   p_pk_cols TEXT[]
 )
 RETURNS INT
 LANGUAGE sql
 AS $$
     INSERT INTO poa.table_def
-        (src_db_name, src_schema_name, src_table_name, pk_cols, op)
+        (db_name, schema_name, table_name, pk_cols, op)
     VALUES
-        (p_src_db_name, p_src_schema_name, p_src_table_name, p_pk_cols, 'a')
-    ON CONFLICT (src_db_name, src_schema_name, src_table_name)
+        (p_db_name, p_schema_name, p_table_name, p_pk_cols, 'a')
+    ON CONFLICT (db_name, schema_name, table_name)
     DO UPDATE SET
         pk_cols = p_pk_cols
     ,   op = 'u'
@@ -241,9 +241,9 @@ AS $$
 $$;
 
 CREATE OR REPLACE FUNCTION poa.get_table_cols (
-    p_src_db_name TEXT
-,   p_src_schema_name TEXT
-,   p_src_table_name TEXT
+    p_db_name TEXT
+,   p_schema_name TEXT
+,   p_table_name TEXT
 )
 RETURNS TABLE (
     col_name TEXT
@@ -266,10 +266,28 @@ AS $$
     JOIN poa.table_def AS td
         ON cd.table_def_id = td.table_def_id
     WHERE
-        td.src_db_name = p_src_db_name
-        AND td.src_schema_name = p_src_schema_name
-        AND td.src_table_name = p_src_table_name
+        td.db_name = p_db_name
+        AND td.schema_name = p_schema_name
+        AND td.table_name = p_table_name
     ORDER BY
         cd.col_name
+    ;
+$$;
+
+CREATE OR REPLACE FUNCTION poa.get_pk(
+    p_db_name TEXT
+,   p_schema_name TEXT
+,   p_table_name TEXT
+)
+RETURNS TEXT[]
+LANGUAGE sql
+AS $$
+    SELECT
+        td.pk_cols
+    FROM poa.table_def AS td
+    WHERE
+        td.db_name = p_db_name
+        AND td.schema_name IS NOT DISTINCT FROM p_schema_name
+        AND td.table_name = p_table_name
     ;
 $$;

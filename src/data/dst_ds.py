@@ -5,16 +5,11 @@ import typing
 
 from src.data.row import Row
 from src.data.row_key import RowKey
-from src.data.table import Table
 
 __all__ = ("DstDs",)
 
 
 class DstDs(abc.ABC):
-    @abc.abstractmethod
-    def add_table_def(self, /, table: Table) -> None:
-        raise NotImplementedError
-
     @abc.abstractmethod
     def add_increasing_col_indices(self, /, increasing_cols: set[str]) -> None:
         raise NotImplementedError
@@ -41,10 +36,6 @@ class DstDs(abc.ABC):
 
     @abc.abstractmethod
     def get_row_count(self) -> int:
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def get_table_def(self) -> Table:
         raise NotImplementedError
 
     @abc.abstractmethod

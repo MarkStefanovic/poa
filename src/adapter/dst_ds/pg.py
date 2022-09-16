@@ -44,10 +44,6 @@ class PgDstDs(data.DstDs):
                 f"ON {full_table_name} ({_wrap_name(col)} DESC);"
             )
 
-    def add_table_def(self, /, table: data.Table) -> None:
-        # TODO
-        pass
-
     def create(self) -> None:
         full_table_name = _generate_full_table_name(
             schema_name=self._dst_table.schema_name,
@@ -148,21 +144,6 @@ class PgDstDs(data.DstDs):
         self._cur.execute(f"SELECT COUNT(*) AS ct FROM {full_table_name}")
         return self._cur.fetchone()["ct"]  # noqa
 
-    def get_table_def(self) -> data.Table:
-        self._cur.execute(
-            """
-            SELECT col_name, col_data_type, col_length, col_precision, col_scale, col_nullable
-            FROM poa.get_table_cols(p_src_db_name := %(src_db_name)s, p_src_schema_name := %(src_schema_name)s, p_src_table_name := %(src_table_name)s)
-            """,
-            {"src_db_name": self._src_table.db_name, "src_schema_name": self._src_table.schema_name, " src_table_name": self._src_table.table_name},
-        )
-        # result = self._cur.fetchall()
-        # col_defs = [
-        #     data.Column(name=row["col_name"], data_type=)
-        #     for row in result
-        # ]
-        # TODO
-
     def table_exists(self) -> bool:
         self._cur.execute(
             """
@@ -238,7 +219,8 @@ def _generate_column_definition(*, col: data.Column) -> str:
         data.DataType.Bool: lambda: f"{col_name} BOOL {nullable}",
         data.DataType.Date: lambda: f"{col_name} DATE {nullable}",
         data.DataType.Decimal: lambda: (
-            f"{col_name} NUMERIC({18 if col.precision is None else col.precision}, {4 if col.scale is None else col.scale}) {nullable}"
+            f"{col_name} NUMERIC({18 if col.precision is None else col.precision}, "
+            f"{4 if col.scale is None else col.scale}) {nullable}"
         ),
         data.DataType.Float: lambda: f"{col_name} FLOAT {nullable}",
         data.DataType.Int: lambda: f"{col_name} INT {nullable}",

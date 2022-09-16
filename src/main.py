@@ -101,12 +101,29 @@ def sync(
                     table_name=src_table_name,
                     pk_cols=tuple(pk),
                 )
+
+                cache = adapter.cache.create(api=dst_api, cur=dst_cur)
+                if cached_src_table := cache.get_table_def(
+                    db_name=src_db_name,
+                    schema_name=src_schema_name,
+                    table_name=src_table_name,
+                ):
+                    if cached_src_table.pk != tuple(pk):
+                        raise Exception(
+                            f"The cached primary key columns for {src_table_name}, {', '.join(cached_src_table.pk)} "
+                            f"does not match the pk argument, {', '.join(pk)}."
+                        )
+                    src_table = cached_src_table
+                else:
+                    src_table = src_ds.get_table()
+                    cache.add_table_def(table=src_table)
+
                 dst_ds = adapter.dst_ds.create(
                     api=dst_api,
                     cur=dst_cur,
                     dst_db_name=dst_db_name,
                     dst_schema_name=dst_schema_name,
-                    src_table=src_ds.get_table(),
+                    src_table=src_table,
                 )
                 start = datetime.datetime.now()
                 result = service.sync(
@@ -135,6 +152,7 @@ def sync(
                     f"{src_schema_name=!r}, {src_table_name=!r}, {incremental=}): {e1!s}\n{e1.__traceback__}"
                 ),
             )
+            raise
     except Exception as e2:
         loguru.logger.error(
             f"An error occurred while running sync({src_db_name=!r}, {dst_db_name=!r}, "

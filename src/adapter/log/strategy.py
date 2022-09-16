@@ -10,4 +10,4 @@ def create(*, api: data.API, cursor_provider: data.CursorProvider) -> data.Log:
         assert isinstance(cursor_provider, PgCursorProvider), f"log.create expects a PgCursorProvider, but got a {type(cursor_provider)}."
         return PgLog(cursor_provider=cursor_provider)
 
-    raise NotImplementedError(f"The log interface has not been implemented for the {api} api.")
+    raise NotImplementedError(f"The Log interface has not been implemented for the {api} api.")

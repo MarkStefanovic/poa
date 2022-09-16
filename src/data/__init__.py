@@ -1,5 +1,6 @@
 from src.data import error
 from src.data.api import *
+from src.data.cache import *
 from src.data.connection_provider import *
 from src.data.cursor_provider import *
 from src.data.dst_ds import *
