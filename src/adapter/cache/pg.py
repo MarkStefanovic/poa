@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from psycopg2.extras import RealDictCursor
 
 from src import data
@@ -67,7 +69,7 @@ class PgCache(data.Cache):
             ]
         )
 
-    def get_table_def(self, *, db_name: str, schema_name: str | None, table_name: str) -> data.Table:
+    def get_table_def(self, *, db_name: str, schema_name: str | None, table_name: str) -> data.Table | None:
         self._cur.execute(
             """
             SELECT 
@@ -90,48 +92,51 @@ class PgCache(data.Cache):
             },
         )
         result = self._cur.fetchall()
-        col_defs: list[data.Column] = []
-        for row in result:
-            data_type = {
-                "big_float": data.DataType.BigFloat,
-                "big_int": data.DataType.BigInt,
-                "bool": data.DataType.Bool,
-                "date": data.DataType.Date,
-                "decimal": data.DataType.Decimal,
-                "float": data.DataType.Float,
-                "int": data.DataType.Int,
-                "text": data.DataType.Text,
-                "timestamp": data.DataType.Timestamp,
-                "timestamptz": data.DataType.TimestampTZ,
-                "uuid": data.DataType.UUID,
-            }[row["col_data_type"]]  # noqa
-            col_def = data.Column(
-                name=row["col_name"],  # noqa
-                data_type=data_type,  # noqa
-                length=row["col_length"],  # noqa
-                precision=row["col_precision"],  # noqa
-                scale=row["col_scale"],  # noqa
-                nullable=row["col_nullable"],  # noqa
+        if result:
+            col_defs: list[data.Column] = []
+            for row in result:
+                data_type = {
+                    "big_float": data.DataType.BigFloat,
+                    "big_int": data.DataType.BigInt,
+                    "bool": data.DataType.Bool,
+                    "date": data.DataType.Date,
+                    "decimal": data.DataType.Decimal,
+                    "float": data.DataType.Float,
+                    "int": data.DataType.Int,
+                    "text": data.DataType.Text,
+                    "timestamp": data.DataType.Timestamp,
+                    "timestamptz": data.DataType.TimestampTZ,
+                    "uuid": data.DataType.UUID,
+                }[row["col_data_type"]]  # noqa
+                col_def = data.Column(
+                    name=row["col_name"],  # noqa
+                    data_type=data_type,  # noqa
+                    length=row["col_length"],  # noqa
+                    precision=row["col_precision"],  # noqa
+                    scale=row["col_scale"],  # noqa
+                    nullable=row["col_nullable"],  # noqa
+                )
+                col_defs.append(col_def)
+
+            self._cur.execute(
+                """
+                SELECT *
+                FROM poa.get_pk(
+                    p_db_name := %(db_name)s
+                ,   p_schema_name := %(schema_name)s
+                ,   p_table_name := %(table_name)s
+                );
+                """,
+                {"db_name": db_name, "schema_name": schema_name, "table_name": table_name},
             )
-            col_defs.append(col_def)
+            pk = self._cur.fetchone()["get_pk"]  # noqa
 
-        self._cur.execute(
-            """
-            SELECT *
-            FROM poa.get_pk(
-                p_db_name := %(db_name)s
-            ,   p_schema_name := %(schema_name)s
-            ,   p_table_name := %(table_name)s
-            );
-            """,
-            {"db_name": db_name, "schema_name": schema_name, "table_name": table_name},
-        )
-        pk = self._cur.fetchone()["get_pk"]  # noqa
+            return data.Table(
+                db_name=db_name,
+                schema_name=schema_name,
+                table_name=table_name,
+                columns=frozenset(col_defs),
+                pk=tuple(pk)
+            )
 
-        return data.Table(
-            db_name=db_name,
-            schema_name=schema_name,
-            table_name=table_name,
-            columns=frozenset(col_defs),
-            pk=tuple(pk)
-        )
+        return None

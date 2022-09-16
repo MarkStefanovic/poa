@@ -13,5 +13,5 @@ class Cache(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def get_table_def(self, *, db_name: str, schema_name: str | None, table_name: str) -> Table:
+    def get_table_def(self, *, db_name: str, schema_name: str | None, table_name: str) -> Table | None:
         raise NotImplementedError

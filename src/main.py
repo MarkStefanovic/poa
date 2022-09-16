@@ -40,6 +40,56 @@ def cleanup(ds_name: str, log_folder: pathlib.Path, days_logs_to_keep: int = 3) 
         raise
 
 
+def inspect(
+    src_db_name: str,
+    src_schema_name: str | None,
+    src_table_name: str,
+    cache_db_name: str,
+    pk: list[str],
+    log_folder: pathlib.Path,
+) -> None:
+    try:
+        if src_schema_name:
+            prefix = f"sync.{src_db_name}.{src_schema_name}.{src_table_name}."
+        else:
+            prefix = f"sync.{src_db_name}.{src_table_name}."
+
+        loguru.logger.add(log_folder / f"{prefix}.info.log", rotation="5 MB", retention="7 days", level="INFO")
+        loguru.logger.add(log_folder / f"{prefix}.error.log", rotation="5 MB", retention="7 days", level="ERROR")
+
+        loguru.logger.info(
+            f"Starting inspect using the following parameters:\n  {src_db_name=!r}\n  "
+            f"{src_schema_name=!r}\n  {src_table_name=!r}\n  {pk=!r}"
+        )
+
+        config_file = adapter.fs.get_config_path()
+
+        src_api = adapter.config.get_api(config_file=config_file, name=src_db_name)
+        src_connection_str = adapter.config.get_connection_str(config_file=config_file, name=src_db_name)
+        src_cursor_provider = adapter.cursor_provider.create(api=src_api, connection_str=src_connection_str)
+
+        cache_api = adapter.config.get_api(config_file=config_file, name=cache_db_name)
+        cache_connection_str = adapter.config.get_connection_str(config_file=config_file, name=cache_db_name)
+        cache_cursor_provider = adapter.cursor_provider.create(api=cache_api, connection_str=cache_connection_str)
+
+        service.inspect(
+            src_api=src_api,
+            cache_api=cache_api,
+            src_cursor_provider=src_cursor_provider,
+            cache_cursor_provider=cache_cursor_provider,
+            src_db_name=src_db_name,
+            src_schema_name=src_schema_name,
+            src_table_name=src_table_name,
+            pk=tuple(pk),
+        )
+    except Exception as e2:
+        loguru.logger.error(
+            f"An error occurred while running inspect({src_db_name=!r}, {src_schema_name=!r}, "
+            f"{src_table_name=!r}, {cache_db_name=!r}, {pk=!r}, log_folder: "
+            f"{log_folder.resolve()!s}): {e2!s}\n{e2.__traceback__}"
+        )
+
+
 def sync(
     src_db_name: str,
     dst_db_name: str,
@@ -175,6 +225,7 @@ if __name__ == '__main__':
 
         cleanup_parser = subparser.add_parser("cleanup")
         full_sync_parser = subparser.add_parser("full-sync")
+        inspect_parser = subparser.add_parser("inspect")
         incremental_sync_parser = subparser.add_parser("incremental-sync")
 
         cleanup_parser.add_argument("--db-name", type=str, required=True)
@@ -196,6 +247,12 @@ if __name__ == '__main__':
         incremental_strategy_options.add_argument("--compare", nargs="+")
         incremental_strategy_options.add_argument("--increasing", nargs="+")
         incremental_sync_parser.add_argument("--skip-if-row-counts-match", action="store_true")
+
+        inspect_parser.add_argument("--src-db", type=str, required=True)
+        inspect_parser.add_argument("--src-schema", type=str, required=True)
+        inspect_parser.add_argument("--src-table", type=str, required=True)
+        inspect_parser.add_argument("--cache-db", type=str, required=True)
+        inspect_parser.add_argument("--pk", nargs="+")
 
         # print(parser.parse_args("cleanup --db-name dw --days-to-keep 5".split()))
         # print(parser.parse_args("full-sync --src-db src --dst-db dw --src-schema sales --src-table customer --pk first_name last_name".split()))
@@ -227,6 +284,9 @@ if __name__ == '__main__':
             )
         elif args.command == "incremental-sync":
             assert args.pk, "--pk is required."
+            assert args.src_db, "--src-db is required."
+            assert args.dst_db, "--dst-db is required."
+            assert args.src_table, "--src-table is required."
 
             if args.compare:
                 compare_cols: set[str] | None = set(args.compare)
@@ -252,6 +312,20 @@ if __name__ == '__main__':
                 increasing_cols=args.increasing,
                 skip_if_row_counts_match=args.skip_if_row_counts_match,
                 recreate=False,
+                log_folder=logging_folder,
+            )
+        elif args.command == "inspect":
+            assert args.pk, "--pk is required."
+            assert args.src_db, "--src-db is required."
+            assert args.src_table, "--src-table is required."
+            assert args.cache_db, "--cache-db is required."
+
+            inspect(
+                src_db_name=args.src_db,
+                src_schema_name=args.src_schema,
+                src_table_name=args.src_table,
+                cache_db_name=args.cache_db,
+                pk=args.pk,
                 log_folder=logging_folder,
             )
     except Exception as e:

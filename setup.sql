@@ -3,6 +3,12 @@ DROP SCHEMA poa CASCADE;
 */
 CREATE SCHEMA poa;
 
+CREATE TABLE poa.error (
+    error_id SERIAL PRIMARY KEY
+,   message TEXT NOT NULL
+,   ts TIMESTAMPTZ(3) NOT NULL DEFAULT now()
+);
+
 CREATE TABLE poa.sync (
     sync_id SERIAL PRIMARY KEY
 ,   src_db_name TEXT NOT NULL
@@ -30,6 +36,15 @@ CREATE TABLE poa.sync_success (
 ,   ts TIMESTAMPTZ(3) NOT NULL DEFAULT now()
 );
 
+CREATE OR REPLACE PROCEDURE poa.log_error(
+    p_error_message TEXT
+)
+LANGUAGE sql
+AS $$
+    INSERT INTO poa.error (message)
+    VALUES (p_error_message);
+$$;
+
 CREATE OR REPLACE PROCEDURE poa.sync_failed (
     p_sync_id INT
 ,   p_error_message TEXT
@@ -42,6 +57,21 @@ BEGIN
 
     INSERT INTO poa.sync_error (sync_id, error_message)
     VALUES (p_sync_id, trim(p_error_message));
+END;
+$$;
+
+CREATE OR REPLACE PROCEDURE poa.sync_skipped (
+    p_sync_id INT
+,   p_skip_reason TEXT
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    ASSERT p_sync_id IS NOT NULL, 'p_sync_id is required';
+    ASSERT length(trim(p_skip_reason)) > 0, 'p_skip_reason is required';
+
+    INSERT INTO poa.sync_skip (sync_id, reason)
+    VALUES (p_sync_id, trim(p_skip_reason));
 END;
 $$;
 
@@ -95,14 +125,20 @@ CREATE OR REPLACE PROCEDURE poa.delete_old_logs (
 )
 LANGUAGE plpgsql
 AS $$
+DECLARE
+    v_cutoff TIMESTAMPTZ := now() - (p_days_to_keep || ' DAYS')::INTERVAL;
+
 BEGIN
+    DELETE FROM poa.error AS e
+    WHERE e.ts < v_cutoff;
+
     DROP TABLE IF EXISTS tmp_sync_ids_to_delete;
     CREATE TEMP TABLE tmp_sync_ids_to_delete (sync_id INT PRIMARY KEY);
 
     INSERT INTO tmp_sync_ids_to_delete (sync_id)
     SELECT s.sync_id
     FROM poa.sync AS s
-    WHERE s.ts < now() - (p_days_to_keep || ' DAYS')::INTERVAL;
+    WHERE s.ts < v_cutoff;
 
     DELETE FROM poa.sync_error AS s
     WHERE EXISTS (

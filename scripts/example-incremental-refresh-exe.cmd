@@ -9,4 +9,3 @@ for %%i in ("%~dp0..") DO SET "folder=%%~fi"
     --src-table mv_scheduled_activities_rt ^
     --pk "id" ^
     --increasing created_date changed_date ^
-    --skip-if-row-counts-match
