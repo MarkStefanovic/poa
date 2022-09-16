@@ -24,13 +24,14 @@ class PgCache(data.Cache):
                 "db_name": table.db_name,
                 "schema_name": table.schema_name,
                 "table_name": table.table_name,
-                "pk": table.pk,
+                "pk": list(table.pk),
             }
         )
         table_def_id = self._cur.fetchone()["add_table_def"]  # noqa
         self._cur.executemany(
             """
-            PERFORM poa.add_col_def(
+            SELECT * 
+            FROM poa.add_col_def(
                 p_table_def_id := %(table_def_id)s
             ,   p_col_name := %(name)s
             ,   p_col_data_type := %(data_type)s
@@ -122,9 +123,10 @@ class PgCache(data.Cache):
             ,   p_schema_name := %(schema_name)s
             ,   p_table_name := %(table_name)s
             );
-            """
+            """,
+            {"db_name": db_name, "schema_name": schema_name, "table_name": table_name},
         )
-        pk = self._cur.fetchone()["pk"]  # noqa
+        pk = self._cur.fetchone()["get_pk"]  # noqa
 
         return data.Table(
             db_name=db_name,
