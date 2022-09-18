@@ -22,16 +22,20 @@ def cleanup(ds_name: str, log_folder: pathlib.Path, days_logs_to_keep: int = 3) 
 
         logger_cursor_provider = adapter.cursor_provider.create(api=dst_api, connection_str=dst_connection_str)
 
+        days_logs_to_keep = adapter.config.get_days_logs_to_keep(config_file=config_file)
         log = adapter.log.create(api=dst_api, cursor_provider=logger_cursor_provider)
+
         try:
             service_cursor_provider = adapter.cursor_provider.create(api=dst_api, connection_str=dst_connection_str)
             service.cleanup(
                 cursor_provider=service_cursor_provider,
-                days_logs_to_keep=adapter.config.get_days_logs_to_keep(config_file=config_file),
+                days_logs_to_keep=days_logs_to_keep,
             )
-            log.cleanup_succeeded()
         except Exception as e1:
-            loguru.logger.exception(e1)
+            log.error(
+                f"An error occurred while running service.cleanup(..., {days_logs_to_keep=!r}): "
+                f"{e!s}\n{e.__traceback__}"
+            )
             raise
     except Exception as e2:
         loguru.logger.error(
@@ -50,9 +54,9 @@ def inspect(
 ) -> None:
     try:
         if src_schema_name:
-            prefix = f"sync.{src_db_name}.{src_schema_name}.{src_table_name}."
+            prefix = f"inspect.{src_db_name}.{src_schema_name}.{src_table_name}."
         else:
-            prefix = f"sync.{src_db_name}.{src_table_name}."
+            prefix = f"inspect.{src_db_name}.{src_table_name}."
 
         loguru.logger.add(log_folder / f"{prefix}.info.log", rotation="5 MB", retention="7 days", level="INFO")
         loguru.logger.add(log_folder / f"{prefix}.error.log", rotation="5 MB", retention="7 days", level="ERROR")

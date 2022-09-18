@@ -3,6 +3,12 @@ DROP SCHEMA poa CASCADE;
 */
 CREATE SCHEMA poa;
 
+CREATE TABLE poa.cleanup (
+    cleanup_id SERIAL PRIMARY KEY
+,   days_kept INT NOT NULL CHECK (days_kept > 0)
+,   ts TIMESTAMPTZ(0) NOT NULL DEFAULT now()
+);
+
 CREATE TABLE poa.error (
     error_id SERIAL PRIMARY KEY
 ,   message TEXT NOT NULL
@@ -132,6 +138,9 @@ BEGIN
     DELETE FROM poa.error AS e
     WHERE e.ts < v_cutoff;
 
+    DELETE FROM poa.cleanup AS c
+    WHERE c.ts < v_cutoff;
+
     DROP TABLE IF EXISTS tmp_sync_ids_to_delete;
     CREATE TEMP TABLE tmp_sync_ids_to_delete (sync_id INT PRIMARY KEY);
 
@@ -167,6 +176,9 @@ BEGIN
         FROM tmp_sync_ids_to_delete AS os
         WHERE s.sync_id = os.sync_id
     );
+
+    INSERT INTO poa.cleanup (days_kept)
+    VALUES (p_days_to_keep);
 END;
 $$;
 
