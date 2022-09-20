@@ -83,6 +83,7 @@ def check(
                     cur=dst_cur,
                     dst_db_name=dst_db_name,
                     dst_schema_name=dst_schema_name,
+                    dst_table_name=dst_table_name,
                     src_table=src_table,
                 )
                 result = service.check(
@@ -201,6 +202,7 @@ def sync(
     src_table_name: str,
     dst_db_name: str,
     dst_schema_name: str,
+    dst_table_name: str,
     incremental: bool,
     pk: list[str],
     compare_cols: set[str] | None,
@@ -220,8 +222,9 @@ def sync(
 
         loguru.logger.info(
             f"Starting sync using the following parameters:\n  {src_db_name=!r}\n  {dst_db_name=!r}\n  "
-            f"{src_schema_name=!r}\n  {src_table_name=!r}\n  {incremental=!r}\n  {pk=!r}\n  {compare_cols=!r}\n  "
-            f"{increasing_cols=!r}\n  {skip_if_row_counts_match=!r}\n  {recreate=!r}\n..."
+            f"{dst_schema_name=!r}\n  {dst_table_name=!r}\n  {src_schema_name=!r}\n  {src_table_name=!r}\n  "
+            f"{incremental=!r}\n  {pk=!r}\n  {compare_cols=!r}\n  {increasing_cols=!r}\n  "
+            f"{skip_if_row_counts_match=!r}\n  {recreate=!r}\n..."
         )
 
         config_file = adapter.fs.get_config_path()
@@ -277,6 +280,7 @@ def sync(
                     cur=dst_cur,
                     dst_db_name=dst_db_name,
                     dst_schema_name=dst_schema_name,
+                    dst_table_name=dst_table_name,
                     src_table=src_table,
                 )
                 start = datetime.datetime.now()
@@ -341,6 +345,7 @@ if __name__ == '__main__':
         full_sync_parser.add_argument("--src-table", type=str, required=True)
         full_sync_parser.add_argument("--dst-db", type=str, required=True)
         full_sync_parser.add_argument("--dst-schema", type=str, required=True)
+        full_sync_parser.add_argument("--dst-table", type=str, required=True)
         full_sync_parser.add_argument("--pk", nargs="+")
         full_sync_parser.add_argument("--recreate", action="store_true")
 
@@ -349,6 +354,7 @@ if __name__ == '__main__':
         incremental_sync_parser.add_argument("--src-table", type=str, required=True)
         incremental_sync_parser.add_argument("--dst-db", type=str, required=True)
         incremental_sync_parser.add_argument("--dst-schema", type=str, required=True)
+        incremental_sync_parser.add_argument("--dst-table", type=str, required=True)
         incremental_sync_parser.add_argument("--pk", nargs="+")
         incremental_strategy_options = incremental_sync_parser.add_mutually_exclusive_group()
         incremental_strategy_options.add_argument("--compare", nargs="+")
@@ -380,7 +386,7 @@ if __name__ == '__main__':
                 src_table_name=args.src_table,
                 dst_db_name=args.dst_db,
                 dst_schema_name=args.dst_schema,
-                dst_table_name=args.dst_table_name,
+                dst_table_name=args.dst_table,
                 pk=args.pk,
                 incremental=False,
                 log_folder=logging_folder,
@@ -398,6 +404,7 @@ if __name__ == '__main__':
             assert args.src_table, "--src-table is required."
             assert args.dst_db, "--dst-db is required."
             assert args.dst_schema, "--dst-schema is required."
+            assert args.dst_table, "--dst-table is required."
             assert args.pk, "--pk is required."
 
             sync(
@@ -406,6 +413,7 @@ if __name__ == '__main__':
                 src_table_name=args.src_table,
                 dst_db_name=args.dst_db,
                 dst_schema_name=args.dst_schema,
+                dst_table_name=args.dst_table,
                 pk=args.pk,
                 incremental=False,
                 compare_cols=None,
@@ -440,6 +448,7 @@ if __name__ == '__main__':
                 src_table_name=args.src_table,
                 dst_db_name=args.dst_db,
                 dst_schema_name=args.dst_schema,
+                dst_table_name=args.dst_table,
                 pk=args.pk,
                 incremental=True,
                 compare_cols=compare,

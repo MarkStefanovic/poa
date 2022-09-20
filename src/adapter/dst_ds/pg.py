@@ -21,22 +21,16 @@ class PgDstDs(data.DstDs):
         cur: RealDictCursor,
         dst_db_name: str,
         dst_schema_name: str | None,
+        dst_table_name: str,
         src_table: data.Table,
     ):
         self._cur = cur
-        self._dst_db_name = dst_db_name
-        self._dst_schema_name = dst_schema_name
         self._src_table = src_table
-
-        if src_table.schema_name:
-            dst_table_name = f"{src_table.db_name}_{src_table.schema_name}_{src_table.table_name}"
-        else:
-            dst_table_name = f"{src_table.db_name}_{src_table.table_name}"
 
         self._dst_table = dataclasses.replace(
             src_table,
-            db_name=self._dst_db_name,
-            schema_name=self._dst_schema_name,
+            db_name=dst_db_name,
+            schema_name=dst_schema_name,
             table_name=dst_table_name,
         )
 
