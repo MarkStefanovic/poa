@@ -2,8 +2,11 @@ from __future__ import annotations
 
 from src import data, adapter
 
+__all__ = ("inspect",)
+
 
 def inspect(
+    *,
     src_api: data.API,
     cache_api: data.API,
     src_cursor_provider: data.CursorProvider,
@@ -12,7 +15,7 @@ def inspect(
     src_schema_name: str | None,
     src_table_name: str,
     pk: tuple[str, ...],
-) -> None:
+) -> data.Table:
     with src_cursor_provider.open() as src_cur:
         src_ds = adapter.src_ds.create(
             api=src_api,
@@ -35,7 +38,6 @@ def inspect(
                         f"The cached primary key columns for {src_table_name}, {', '.join(cached_src_table.pk)} "
                         f"does not match the pk argument, {', '.join(pk)}."
                     )
-
                 return cached_src_table
             else:
                 src_table = src_ds.get_table()

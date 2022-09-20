@@ -7,6 +7,10 @@ __all__ = ("Log",)
 
 class Log(abc.ABC):
     @abc.abstractmethod
+    def delete_old_logs(self, *, days_to_keep: int) -> None:
+        raise NotImplementedError
+
+    @abc.abstractmethod
     def error(self, /, error_message: str) -> None:
         raise NotImplementedError
 
@@ -19,7 +23,13 @@ class Log(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def sync_started(self, *, src_db_name: str, src_schema_name: str | None, src_table_name: str, incremental: bool) -> int:
+    def sync_started(
+        self, *,
+        src_db_name: str,
+        src_schema_name: str | None,
+        src_table_name: str,
+        incremental: bool,
+    ) -> int:
         raise NotImplementedError
 
     @abc.abstractmethod

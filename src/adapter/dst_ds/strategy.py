@@ -8,7 +8,14 @@ from src.adapter.dst_ds.pg import PgDstDs
 __all__ = ("create",)
 
 
-def create(*, api: data.API, cur: typing.Any, dst_db_name: str, dst_schema_name: str, src_table: data.Table) -> data.DstDs:
+def create(
+    *,
+    api: data.API,
+    cur: typing.Any,
+    dst_db_name: str,
+    dst_schema_name: str | None,
+    src_table: data.Table,
+) -> data.DstDs:
     if api == data.API.PSYCOPG2:
         return PgDstDs(
             cur=typing.cast(RealDictCursor, cur),

@@ -11,6 +11,20 @@ class PgLog(data.Log):
     def __init__(self, *, cursor_provider: data.CursorProvider):
         self._cursor_provider = cursor_provider
 
+    def delete_old_logs(self, *, days_to_keep: int) -> None:
+        try:
+            with self._cursor_provider.open() as cur:
+                cur.execute(
+                    "CALL poa.delete_old_logs (p_days_to_keep := %(days_to_keep)s);",
+                    {"days_to_keep": days_to_keep},
+                )
+        except Exception as e:
+            self.error(
+                f"An error occurred while running delete_old_logs({days_to_keep=!r}): "
+                f"{e!s}\n{e.__traceback__}"
+            )
+            raise
+
     def error(self, /, error_message: str) -> None:
         try:
             with self._cursor_provider.open() as cur:

@@ -7,6 +7,10 @@ class PoaError(Exception):
     """Base class for errors occurring in the poa codebase"""
 
 
+class CheckError(PoaError):
+    """Error arising from the check service."""
+
+
 class TableDoesntExist(PoaError):
     def __init__(self, *, schema_name: str | None, table_name: str):
         if schema_name:

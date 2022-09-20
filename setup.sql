@@ -3,6 +3,22 @@ DROP SCHEMA poa CASCADE;
 */
 CREATE SCHEMA poa;
 
+CREATE TABLE poa.check_result (
+    check_result_id SERIAL PRIMARY KEY
+,   src_db_name TEXT NOT NULL
+,   src_schema_name TEXT NULL
+,   src_table_name TEXT NOT NULL
+,   dst_db_name TEXT NOT NULL
+,   dst_schema_name TEXT NULL
+,   dst_table_name TEXT NOT NULL
+,   src_rows INT NOT NULL
+,   dst_rows INT NOT NULL
+,   extra_keys JSONB[] NULL
+,   missing_keys JSONB[] NULL
+,   execution_millis INT NOT NULL CHECK (execution_millis >= 0)
+,   ts TIMESTAMPTZ(3) NOT NULL DEFAULT now()
+);
+
 CREATE TABLE poa.cleanup (
     cleanup_id SERIAL PRIMARY KEY
 ,   days_kept INT NOT NULL CHECK (days_kept > 0)
@@ -41,6 +57,48 @@ CREATE TABLE poa.sync_success (
 ,   execution_millis INT NOT NULL
 ,   ts TIMESTAMPTZ(3) NOT NULL DEFAULT now()
 );
+
+CREATE OR REPLACE PROCEDURE poa.add_check_result (
+    p_src_db_name TEXT
+,   p_src_schema_name TEXT
+,   p_src_table_name TEXT
+,   p_dst_db_name TEXT
+,   p_dst_schema_name TEXT
+,   p_dst_table_name TEXT
+,   p_src_rows INT
+,   p_dst_rows INT
+,   p_extra_keys JSONB[]
+,   p_missing_keys JSONB[]
+,   p_execution_millis INT
+)
+LANGUAGE sql
+AS $$
+    INSERT INTO poa.check_result (
+        src_db_name
+    ,   src_schema_name
+    ,   src_table_name
+    ,   dst_db_name
+    ,   dst_schema_name
+    ,   dst_table_name
+    ,   src_rows
+    ,   dst_rows
+    ,   extra_keys
+    ,   missing_keys
+    ,   execution_millis
+    ) VALUES (
+        p_src_db_name
+    ,   p_src_schema_name
+    ,   p_src_table_name
+    ,   p_dst_db_name
+    ,   p_dst_schema_name
+    ,   p_dst_table_name
+    ,   p_src_rows
+    ,   p_dst_rows
+    ,   p_extra_keys
+    ,   p_missing_keys
+    ,   p_execution_millis
+    );
+$$;
 
 CREATE OR REPLACE PROCEDURE poa.log_error(
     p_error_message TEXT
@@ -135,6 +193,9 @@ DECLARE
     v_cutoff TIMESTAMPTZ := now() - (p_days_to_keep || ' DAYS')::INTERVAL;
 
 BEGIN
+    DELETE FROM poa.check_result AS cr
+    WHERE cr.ts < v_cutoff;
+
     DELETE FROM poa.error AS e
     WHERE e.ts < v_cutoff;
 

@@ -1,7 +1,6 @@
 {
   "get-seconds-between-cleanups":  1800,
   "days-logs-to-keep": 3,
-  "dst-schema": "stg",
   "ds": {
     "pg-example": {
       "api": "psycopg2",

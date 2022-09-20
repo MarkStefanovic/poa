@@ -13,7 +13,6 @@ __all__ = (
     "get_api",
     "get_connection_str",
     "get_days_logs_to_keep",
-    "get_dst_schema",
     "get_seconds_between_cleanups",
 )
 
@@ -34,10 +33,6 @@ def get_api(*, config_file: pathlib.Path, name: str) -> data.API:
 @functools.lru_cache(maxsize=100)
 def get_connection_str(*, config_file: pathlib.Path, name: str) -> str:
     return str(_load(config_file=config_file)["ds"][name]["connection-string"])
-
-
-def get_dst_schema(*, config_file: pathlib.Path) -> str:
-    return str(_load(config_file=config_file)["dst-schema"])
 
 
 def get_days_logs_to_keep(*, config_file: pathlib.Path) -> int:

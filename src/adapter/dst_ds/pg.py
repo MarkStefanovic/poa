@@ -15,7 +15,14 @@ __all__ = ("PgDstDs",)
 
 # noinspection SqlDialectInspection,SqlNoDataSourceInspection,SqlResolve
 class PgDstDs(data.DstDs):
-    def __init__(self, *, cur: RealDictCursor, dst_db_name: str, dst_schema_name: str | None, src_table: data.Table):
+    def __init__(
+        self,
+        *,
+        cur: RealDictCursor,
+        dst_db_name: str,
+        dst_schema_name: str | None,
+        src_table: data.Table,
+    ):
         self._cur = cur
         self._dst_db_name = dst_db_name
         self._dst_schema_name = dst_schema_name
@@ -31,6 +38,39 @@ class PgDstDs(data.DstDs):
             db_name=self._dst_db_name,
             schema_name=self._dst_schema_name,
             table_name=dst_table_name,
+        )
+
+    def add_check_result(self, /, result: data.CheckResult) -> None:
+        sql = textwrap.dedent(f"""
+            CALL poa.add_check_result (
+                p_src_db_name := %(src_db_name)s
+            ,   p_src_schema_name := %(p_srschema_name)s
+            ,   p_src_table_name := %(p_s_table_name)s
+            ,   p_dst_db_name := %(dst_db_name)s
+            ,   p_dst_schema_name := %(p_dsschema_name)s
+            ,   p_dst_table_name := %(p_d_table_name)s
+            ,   p_src_rows :=(p_src_rows)s 
+            ,   p_dst_rows :=(p_dst_rows)s
+            ,   p_extra_keys := %_extra_keys)s 
+            ,   p_missing_keys := %(pissing_keys)s
+            ,   p_execution_millis := %(execution_millis)s
+            );
+        """).strip()
+        self._cur.execute(
+            sql,
+            {
+                "src_db_name": result.src_db_name,
+                "src_schema_name": result.src_schema_name,
+                "src_table_name": result.src_table_name,
+                "dst_db_name": result.dst_db_name,
+                "dst_schema_name": result.dst_schema_name,
+                "dst_table_name": result.dst_table_name,
+                "src_rows": result.src_rows,
+                "dst_rows": result.dst_rows,
+                "extra_keys": list(result.extra_keys or set()),
+                "missing_keys": list(result.missing_keys or set()),
+                "execution_millis": result.execution_millis,
+            }
         )
 
     def add_increasing_col_indices(self, /, increasing_cols: set[str]) -> None:
@@ -118,7 +158,10 @@ class PgDstDs(data.DstDs):
             params = dict(sorted_after)
         sql += "\nWHERE\n  poa_op <> 'd'"
         if sorted_after:
-            sql += "\n  AND (" + "\n    OR ".join(f"{_wrap_name(key)} > %({key})s" for key, val in sorted_after) + "\n)"
+            sql += "\n  AND (" + "\n    OR ".join(
+                f"{_wrap_name(key)} > %({key})s"
+                for key, val in sorted_after
+            ) + "\n)"
         self._cur.execute(sql, params)
         return self._cur.fetchall()  # noqa
 

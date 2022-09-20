@@ -5,7 +5,7 @@ import typing
 import psycopg2
 import pyodbc
 import pytest
-from psycopg2._psycopg import connection
+from psycopg2._psycopg import connection  # noqa
 from psycopg2.extras import RealDictCursor
 
 

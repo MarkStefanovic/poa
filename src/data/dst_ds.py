@@ -3,6 +3,7 @@ from __future__ import annotations
 import abc
 import typing
 
+from src.data.check_result import CheckResult
 from src.data.row import Row
 from src.data.row_key import RowKey
 
@@ -10,6 +11,10 @@ __all__ = ("DstDs",)
 
 
 class DstDs(abc.ABC):
+    @abc.abstractmethod
+    def add_check_result(self, /, result: CheckResult) -> None:
+        raise NotImplementedError
+
     @abc.abstractmethod
     def add_increasing_col_indices(self, /, increasing_cols: set[str]) -> None:
         raise NotImplementedError

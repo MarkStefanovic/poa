@@ -2,7 +2,7 @@ import contextlib
 import typing
 
 import psycopg2
-from psycopg2._psycopg import cursor
+from psycopg2._psycopg import cursor  # noqa
 from psycopg2.extras import RealDictCursor
 
 from src import data

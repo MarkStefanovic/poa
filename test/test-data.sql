@@ -4,10 +4,9 @@ DECLARE v_sync_id INT;
 BEGIN
     v_sync_id = (
         SELECT * FROM poa.sync_started(
-            p_src_api := 'psycopg2'
-        ,   p_dst_api := 'pyodbc'
-        ,   p_schema_name := 'dbo'
-        ,   p_table_name := 'activity'
+            p_src_db_name := 'src'
+        ,   p_src_schema_name := 'sales'
+        ,   p_src_table_name := 'customer'
         ,   p_incremental := TRUE
         )
     );
