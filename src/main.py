@@ -122,7 +122,7 @@ def cleanup(*, db_name: str, log_folder: pathlib.Path, days_logs_to_keep: int = 
         config_file = adapter.fs.get_config_path()
 
         dst_api = adapter.config.get_api(config_file=config_file, name=db_name)
-        dst_connection_str = adapter.config.get_api(config_file=config_file, name=db_name)
+        dst_connection_str = adapter.config.get_connection_str(config_file=config_file, name=db_name)
 
         logger_cursor_provider = adapter.cursor_provider.create(api=dst_api, connection_str=dst_connection_str)
 
@@ -337,7 +337,7 @@ if __name__ == '__main__':
         inspect_parser = subparser.add_parser("inspect")
         incremental_sync_parser = subparser.add_parser("incremental-sync")
 
-        cleanup_parser.add_argument("--db-name", type=str, required=True)
+        cleanup_parser.add_argument("--db", type=str, required=True)
         cleanup_parser.add_argument("--days-to-keep", type=int, default=3)
 
         full_sync_parser.add_argument("--src-db", type=str, required=True)
@@ -392,10 +392,10 @@ if __name__ == '__main__':
                 log_folder=logging_folder,
             )
         elif args.command == "cleanup":
-            assert args.db_name, "--db-name is required"
+            assert args.db, "--db is required"
 
             cleanup(
-                db_name=args.db_name,
+                db_name=args.db,
                 log_folder=logging_folder,
                 days_logs_to_keep=args.days_to_keep,
             )
