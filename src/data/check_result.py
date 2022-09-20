@@ -1,6 +1,6 @@
 import dataclasses
 
-from src.data import FrozenDict
+from src.data.frozen_dict import FrozenDict
 
 __all__ = ("CheckResult",)
 
