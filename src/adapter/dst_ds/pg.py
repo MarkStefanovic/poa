@@ -38,15 +38,15 @@ class PgDstDs(data.DstDs):
         sql = textwrap.dedent(f"""
             CALL poa.add_check_result (
                 p_src_db_name := %(src_db_name)s
-            ,   p_src_schema_name := %(p_srschema_name)s
-            ,   p_src_table_name := %(p_s_table_name)s
+            ,   p_src_schema_name := %(src_schema_name)s
+            ,   p_src_table_name := %(src_table_name)s
             ,   p_dst_db_name := %(dst_db_name)s
-            ,   p_dst_schema_name := %(p_dsschema_name)s
-            ,   p_dst_table_name := %(p_d_table_name)s
-            ,   p_src_rows :=(p_src_rows)s 
-            ,   p_dst_rows :=(p_dst_rows)s
-            ,   p_extra_keys := %_extra_keys)s 
-            ,   p_missing_keys := %(pissing_keys)s
+            ,   p_dst_schema_name := %(dst_schema_name)s
+            ,   p_dst_table_name := %(dst_table_name)s
+            ,   p_src_rows := %(src_rows)s 
+            ,   p_dst_rows := %(dst_rows)s
+            ,   p_extra_keys := %(extra_keys)s 
+            ,   p_missing_keys := %(missing_keys)s
             ,   p_execution_millis := %(execution_millis)s
             );
         """).strip()
@@ -179,7 +179,7 @@ class PgDstDs(data.DstDs):
             schema_name=self._dst_table.schema_name,
             table_name=self._dst_table.table_name,
         )
-        self._cur.execute(f"SELECT COUNT(*) AS ct FROM {full_table_name}")
+        self._cur.execute(f"SELECT COUNT(*) AS ct FROM {full_table_name} WHERE poa_op <> 'd'")
         return self._cur.fetchone()["ct"]  # noqa
 
     def table_exists(self) -> bool:
