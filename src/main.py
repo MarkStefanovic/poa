@@ -17,7 +17,6 @@ def check(
     dst_db_name: str,
     dst_schema_name: str | None,
     dst_table_name: str,
-    incremental: bool,
     pk: list[str],
     log_folder: pathlib.Path,
 ) -> None:
@@ -31,8 +30,8 @@ def check(
         loguru.logger.add(log_folder / f"{prefix}.error.log", rotation="5 MB", retention="7 days", level="ERROR")
 
         loguru.logger.info(
-            f"Starting sync using the following parameters:\n  {src_db_name=!r}\n  {dst_db_name=!r}\n  "
-            f"{src_schema_name=!r}\n  {src_table_name=!r}\n  {incremental=!r}\n  {pk=!r}\n..."
+            f"Starting check using the following parameters:\n  {src_db_name=!r}\n  {dst_db_name=!r}\n  "
+            f"{src_schema_name=!r}\n  {src_table_name=!r}\n  {pk=!r}\n..."
         )
 
         config_file = adapter.fs.get_config_path()
@@ -100,16 +99,14 @@ def check(
                 dst_ds.add_check_result(result)
         except Exception as e1:
             log.error(
-                f"An error occurred while running sync({src_db_name=!r}, {src_schema_name=!r}, "
-                f"{src_table_name=!r}, {dst_db_name=!r}, {dst_schema_name=!r}, {incremental=}): "
-                f"{e1!s}\n{e1.__traceback__}"
+                f"An error occurred while running check({src_db_name=!r}, {src_schema_name=!r}, "
+                f"{src_table_name=!r}, {dst_db_name=!r}, {dst_schema_name=!r}, {e1!s}\n{e1.__traceback__}"
             )
             raise
     except Exception as e2:
         loguru.logger.error(
-            f"An error occurred while running sync({src_db_name=!r}, {src_schema_name=!r}, "
-            f"{src_table_name=!r}, {dst_db_name=!r}, {dst_schema_name=!r}, {incremental=}): "
-            f"{e2!s}\n{e2.__traceback__}"
+            f"An error occurred while running check({src_db_name=!r}, {src_schema_name=!r}, "
+            f"{src_table_name=!r}, {dst_db_name=!r}, {dst_schema_name=!r}): {e2!s}\n{e2.__traceback__}"
         )
         raise
 
@@ -332,10 +329,19 @@ if __name__ == '__main__':
         parser = argparse.ArgumentParser()
         subparser = parser.add_subparsers(dest="command")
 
+        check_parser = subparser.add_parser("check")
         cleanup_parser = subparser.add_parser("cleanup")
         full_sync_parser = subparser.add_parser("full-sync")
         inspect_parser = subparser.add_parser("inspect")
         incremental_sync_parser = subparser.add_parser("incremental-sync")
+
+        check_parser.add_argument("--src-db", type=str, required=True)
+        check_parser.add_argument("--src-schema", type=str, required=True)
+        check_parser.add_argument("--src-table", type=str, required=True)
+        check_parser.add_argument("--dst-db", type=str, required=True)
+        check_parser.add_argument("--dst-schema", type=str, required=True)
+        check_parser.add_argument("--dst-table", type=str, required=True)
+        check_parser.add_argument("--pk", nargs="+")
 
         cleanup_parser.add_argument("--db", type=str, required=True)
         cleanup_parser.add_argument("--days-to-keep", type=int, default=3)
@@ -388,7 +394,6 @@ if __name__ == '__main__':
                 dst_schema_name=args.dst_schema,
                 dst_table_name=args.dst_table,
                 pk=args.pk,
-                incremental=False,
                 log_folder=logging_folder,
             )
         elif args.command == "cleanup":
