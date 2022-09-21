@@ -54,6 +54,9 @@ CREATE TABLE poa.sync_skip (
 
 CREATE TABLE poa.sync_success (
     sync_id INT PRIMARY KEY REFERENCES poa.sync (sync_id)
+,   rows_added INT NOT NULL
+,   rows_deleted INT NOT NULL
+,   rows_updated INT NOT NULL
 ,   execution_millis INT NOT NULL
 ,   ts TIMESTAMPTZ(3) NOT NULL DEFAULT now()
 );
@@ -171,16 +174,22 @@ $$;
 
 CREATE OR REPLACE PROCEDURE poa.sync_succeeded (
     p_sync_id INT
+,   p_rows_added INT
+,   p_rows_deleted INT
+,   p_rows_updated INT
 ,   p_execution_millis INT
 )
 LANGUAGE plpgsql
 AS $$
 BEGIN
     ASSERT p_sync_id IS NOT NULL, 'p_sync_id is required';
+    ASSERT p_rows_added >= 0, 'p_rows_added must be >= 0, but got %.', p_rows_added;
+    ASSERT p_rows_deleted >= 0, 'p_rows_deleted must be >= 0, but got %.', p_rows_deleted;
+    ASSERT p_rows_updated >= 0, 'p_rows_updated must be >= 0, but got %.', p_rows_updated;
     ASSERT p_execution_millis >= 0, 'p_execution_millis must be >= 0, but got %.', p_execution_millis;
 
-    INSERT INTO poa.sync_success (sync_id, execution_millis)
-    VALUES (p_sync_id, p_execution_millis);
+    INSERT INTO poa.sync_success (sync_id, rows_added, rows_deleted, rows_updated, execution_millis)
+    VALUES (p_sync_id, p_rows_added, p_rows_deleted, p_rows_updated, p_execution_millis);
 END;
 $$;
 

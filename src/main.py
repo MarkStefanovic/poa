@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import datetime
 import pathlib
 import sys
 
@@ -231,12 +230,14 @@ def sync(
 
         log_cursor_provider = adapter.cursor_provider.create(api=dst_api, connection_str=dst_connection_str)
         log = adapter.log.create(api=dst_api, cursor_provider=log_cursor_provider)
+
         sync_id = log.sync_started(
             src_db_name=src_db_name,
             src_schema_name=src_schema_name,
             src_table_name=src_table_name,
             incremental=incremental,
         )
+
         try:
             src_api = adapter.config.get_api(config_file=config_file, name=src_db_name)
             src_connection_str = adapter.config.get_connection_str(config_file=config_file, name=src_db_name)
@@ -257,6 +258,7 @@ def sync(
                 )
 
                 cache = adapter.cache.create(api=dst_api, cur=dst_cur)
+
                 if cached_src_table := cache.get_table_def(
                     db_name=src_db_name,
                     schema_name=src_schema_name,
@@ -280,7 +282,7 @@ def sync(
                     dst_table_name=dst_table_name,
                     src_table=src_table,
                 )
-                start = datetime.datetime.now()
+
                 result = service.sync(
                     src_ds=src_ds,
                     dst_ds=dst_ds,
@@ -290,9 +292,15 @@ def sync(
                     skip_if_row_counts_match=skip_if_row_counts_match,
                     recreate=recreate,
                 )
+
                 if result.status == "succeeded":
-                    execution_millis = int((datetime.datetime.now() - start).total_seconds() * 1000)
-                    log.sync_succeeded(sync_id=sync_id, execution_millis=execution_millis)
+                    log.sync_succeeded(
+                        sync_id=sync_id,
+                        rows_added=result.rows_added,
+                        rows_deleted=result.rows_deleted,
+                        rows_updated=result.rows_updated,
+                        execution_millis=result.execution_millis or 0,
+                    )
                 elif result.status == "failed":
                     log.sync_failed(sync_id=sync_id, reason=result.error_message or "No error message was provided.")
                 elif result.status == "skipped":

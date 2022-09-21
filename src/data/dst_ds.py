@@ -32,7 +32,12 @@ class DstDs(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def fetch_rows(self, *, col_names: set[str] | None, after: dict[str, typing.Hashable] | None) -> list[Row]:
+    def fetch_rows(
+        self,
+        *,
+        col_names: set[str] | None,
+        after: dict[str, typing.Hashable] | None,
+    ) -> list[Row]:
         raise NotImplementedError
 
     @abc.abstractmethod

@@ -35,7 +35,11 @@ def sync(
                     return data.SyncResult.skipped(reason="row counts match.")
 
             if compare_cols:
-                return _incremental_compare_refresh(src_ds=src_ds, dst_ds=dst_ds, compare_cols=compare_cols)
+                return _incremental_compare_refresh(
+                    src_ds=src_ds,
+                    dst_ds=dst_ds,
+                    compare_cols=compare_cols,
+                )
             else:
                 assert increasing_cols is not None, "No increasing_cols were provided."
 
@@ -49,8 +53,8 @@ def sync(
                             after=after,
                         )
                 return _full_refresh(src_ds=src_ds, dst_ds=dst_ds)
-
-        return _full_refresh(src_ds=src_ds, dst_ds=dst_ds)
+        else:
+            return _full_refresh(src_ds=src_ds, dst_ds=dst_ds)
     except Exception as e:
         return data.SyncResult.failed(
             error_message=f"An error occurred while running sync(): {e!s}\n{e.__traceback__}"

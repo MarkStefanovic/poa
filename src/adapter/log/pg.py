@@ -98,12 +98,34 @@ class PgLog(data.Log):
             )
             raise
 
-    def sync_succeeded(self, *, sync_id: int, execution_millis: int) -> None:
+    def sync_succeeded(
+        self,
+        *,
+        sync_id: int,
+        rows_added: int,
+        rows_deleted: int,
+        rows_updated: int,
+        execution_millis: int,
+    ) -> None:
         try:
             with self._cursor_provider.open() as cur:
                 cur.execute(
-                    "CALL poa.sync_succeeded(p_sync_id := %(sync_id)s, p_execution_millis := %(execution_millis)s);",
-                    {"sync_id": sync_id, "execution_millis": execution_millis},
+                    """
+                    CALL poa.sync_succeeded(
+                        p_sync_id := %(sync_id)s
+                    ,   p_rows_added := %(rows_added)s
+                    ,   p_rows_deleted := %(rows_deleted)s
+                    ,   p_rows_updated := %(rows_updated)s
+                    ,   p_execution_millis := %(execution_millis)s
+                    );
+                    """,
+                    {
+                        "sync_id": sync_id,
+                        "rows_added": rows_added,
+                        "rows_deleted": rows_deleted,
+                        "rows_updated": rows_updated,
+                        "execution_millis": execution_millis,
+                    },
                 )
         except Exception as e:
             self.error(

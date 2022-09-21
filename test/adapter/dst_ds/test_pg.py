@@ -30,7 +30,13 @@ def customer_table_fixture() -> data.Table:
 
 def test_create(pg_cursor_fixture: RealDictCursor, customer_table_fixture: data.Table):
     assert not _customer_table_exists(cur=pg_cursor_fixture), "The table should not exist before create."
-    ds = PgDstDs(cur=pg_cursor_fixture, dst_db_name="dst", dst_schema_name="poa", src_table=customer_table_fixture)
+    ds = PgDstDs(
+        cur=pg_cursor_fixture,
+        dst_db_name="dst",
+        dst_schema_name="poa",
+        dst_table_name="src_sales_customer",
+        src_table=customer_table_fixture,
+    )
     ds.create()
     assert _customer_table_exists(cur=pg_cursor_fixture), "The table was not created after create()."
 
@@ -45,7 +51,13 @@ def test_delete_rows(pg_cursor_fixture: RealDictCursor, customer_table_fixture: 
         ,   ('2022-09-02', 2, '2022-09-11 +0', '2022-09-10 +0', 'Mandie', 'Mandlebrot', 'M', 2345.56, '', 'u', '2022-09-10 +0')
         ,   ('2022-09-02', 3, '2022-08-09 +0', null, 'Bill', 'Button', 'B', 345.67, '', 'a', '2022-09-10 +0')
     """)
-    ds = PgDstDs(cur=pg_cursor_fixture, dst_db_name="dst", dst_schema_name="poa", src_table=customer_table_fixture)
+    ds = PgDstDs(
+        cur=pg_cursor_fixture,
+        dst_db_name="dst",
+        dst_schema_name="poa",
+        dst_table_name="src_sales_customer",
+        src_table=customer_table_fixture,
+    )
     ds.delete_rows(keys={data.FrozenDict({"customer_id": 2})})
     pg_cursor_fixture.execute("SELECT poa_op FROM poa.src_sales_customer WHERE customer_id = 2")
     assert pg_cursor_fixture.fetchone()["poa_op"] == "d", "customer_id = 2 should have been deleted, but it wasn't."  # noqa
@@ -61,7 +73,13 @@ def test_fetch_rows_when_after_is_none(pg_cursor_fixture: RealDictCursor, custom
         ,   ('2022-09-02', 2, '2022-09-11 +0', '2022-09-10 +0', 'Mandie', 'Mandlebrot', 'M', 2345.56, '', 'u', '2022-09-10 +0')
         ,   ('2022-09-02', 3, '2022-08-09 +0', null, 'Bill', 'Button', 'B', 345.67, '', 'a', '2022-09-10 +0')
     """)
-    ds = PgDstDs(cur=pg_cursor_fixture, dst_db_name="dst", dst_schema_name="poa", src_table=customer_table_fixture)
+    ds = PgDstDs(
+        cur=pg_cursor_fixture,
+        dst_db_name="dst",
+        dst_schema_name="poa",
+        dst_table_name="src_sales_customer",
+        src_table=customer_table_fixture,
+    )
     rows = ds.fetch_rows(col_names={"first_name", "last_name"}, after=None)
     assert rows == [
         {"first_name": "Steve", "last_name": "Smith"},
@@ -80,7 +98,13 @@ def test_fetch_rows_when_after_is_not_none(pg_cursor_fixture: RealDictCursor, cu
         ,   ('2022-09-02', 2, '2022-09-11 +0', '2022-09-10 +0', 'Mandie', 'Mandlebrot', 'M', 2345.56, '', 'u', '2022-09-10 +0')
         ,   ('2022-09-02', 3, '2022-09-12 +0', null, 'Bill', 'Button', 'B', 345.67, '', 'a', '2022-09-10 +0')
     """)
-    ds = PgDstDs(cur=pg_cursor_fixture, dst_db_name="dst", dst_schema_name="poa", src_table=customer_table_fixture)
+    ds = PgDstDs(
+        cur=pg_cursor_fixture,
+        dst_db_name="dst",
+        dst_schema_name="poa",
+        dst_table_name="src_sales_customer",
+        src_table=customer_table_fixture,
+    )
     rows = ds.fetch_rows(
         col_names={"first_name", "last_name"},
         after={
@@ -101,7 +125,13 @@ def test_get_max_values(pg_cursor_fixture: RealDictCursor, customer_table_fixtur
         ,   ('2022-09-02', 2, '2022-09-11 +0', '2022-09-10 +0', 'Mandie', 'Mandlebrot', 'M', 2345.56, '', 'u', '2022-09-10 +0')
         ,   ('2022-09-02', 3, '2022-08-09 +0', null, 'Bill', 'Button', 'B', 345.67, '', 'a', '2022-09-10 +0')
     """)
-    ds = PgDstDs(cur=pg_cursor_fixture, dst_db_name="dst", dst_schema_name="poa", src_table=customer_table_fixture)
+    ds = PgDstDs(
+        cur=pg_cursor_fixture,
+        dst_db_name="dst",
+        dst_schema_name="poa",
+        dst_table_name="src_sales_customer",
+        src_table=customer_table_fixture,
+    )
     rows = ds.get_max_values({"date_added", "date_deleted"})
     assert rows == {
         "date_added": datetime.datetime(2022, 9, 11, tzinfo=datetime.timezone.utc),
@@ -119,14 +149,26 @@ def test_get_row_count(pg_cursor_fixture: RealDictCursor, customer_table_fixture
         ,   ('2022-09-02', 2, '2022-09-11 +0', '2022-09-10 +0', 'Mandie', 'Mandlebrot', 'M', 2345.56, '', 'u', '2022-09-10 +0')
         ,   ('2022-09-02', 3, '2022-08-09 +0', null, 'Bill', 'Button', 'B', 345.67, '', 'a', '2022-09-10 +0')
     """)
-    ds = PgDstDs(cur=pg_cursor_fixture, dst_db_name="dst", dst_schema_name="poa", src_table=customer_table_fixture)
+    ds = PgDstDs(
+        cur=pg_cursor_fixture,
+        dst_db_name="dst",
+        dst_schema_name="poa",
+        dst_table_name="src_sales_customer",
+        src_table=customer_table_fixture,
+    )
     rows = ds.get_row_count()
     assert rows == 3
 
 
 def test_table_exists(pg_cursor_fixture: RealDictCursor, customer_table_fixture: data.Table):
     _create_customer_table(cur=pg_cursor_fixture)
-    ds = PgDstDs(cur=pg_cursor_fixture, dst_db_name="src", dst_schema_name="poa", src_table=customer_table_fixture)
+    ds = PgDstDs(
+        cur=pg_cursor_fixture,
+        dst_db_name="src",
+        dst_schema_name="poa",
+        dst_table_name="src_sales_customer",
+        src_table=customer_table_fixture,
+    )
     assert ds.table_exists()
 
 
@@ -143,7 +185,13 @@ def test_truncate(pg_cursor_fixture: RealDictCursor, customer_table_fixture: dat
     pg_cursor_fixture.execute("SELECT COUNT(*) AS ct FROM poa.src_sales_customer")
     initial_rows = pg_cursor_fixture.fetchone()["ct"]  # noqa
     assert initial_rows == 3, f"initial rows should be 3, but there were {initial_rows} rows."
-    ds = PgDstDs(cur=pg_cursor_fixture, dst_db_name="src", dst_schema_name="poa", src_table=customer_table_fixture)
+    ds = PgDstDs(
+        cur=pg_cursor_fixture,
+        dst_db_name="src",
+        dst_schema_name="poa",
+        dst_table_name="src_sales_customer",
+        src_table=customer_table_fixture,
+    )
     ds.truncate()
     pg_cursor_fixture.execute("SELECT COUNT(*) AS ct FROM poa.src_sales_customer")
     rows_after_truncate = pg_cursor_fixture.fetchone()["ct"]  # noqa
@@ -163,7 +211,13 @@ def test_upsert_rows(pg_cursor_fixture: RealDictCursor, customer_table_fixture: 
     pg_cursor_fixture.execute("SELECT COUNT(*) AS ct FROM poa.src_sales_customer")
     initial_rows = pg_cursor_fixture.fetchone()["ct"]  # noqa
     assert initial_rows == 3, f"initial rows should be 3, but there were {initial_rows} rows."
-    ds = PgDstDs(cur=pg_cursor_fixture, dst_db_name="src", dst_schema_name="poa", src_table=customer_table_fixture)
+    ds = PgDstDs(
+        cur=pg_cursor_fixture,
+        dst_db_name="src",
+        dst_schema_name="poa",
+        dst_table_name="src_sales_customer",
+        src_table=customer_table_fixture,
+    )
     rows = [
         {"birth_date": datetime.date(1912, 3, 4), "customer_id": 1, "date_added": datetime.datetime(2010, 1, 2), "date_deleted": None, "first_name": "Steve", "last_name": "Smith", "middle_name": "S", "purchases": 2345.67},
         {"birth_date": datetime.date(2001, 2, 3), "customer_id": 4, "date_added": datetime.datetime(2011, 2, 3), "date_deleted": datetime.date(2011, 3, 4), "first_name": "Tim", "last_name": "Timely", "middle_name": "T", "purchases": 13.45},

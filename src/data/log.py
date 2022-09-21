@@ -33,5 +33,13 @@ class Log(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def sync_succeeded(self, *, sync_id: int, execution_millis: int) -> None:
+    def sync_succeeded(
+        self,
+        *,
+        sync_id: int,
+        rows_added: int,
+        rows_deleted: int,
+        rows_updated: int,
+        execution_millis: int,
+    ) -> None:
         raise NotImplementedError
