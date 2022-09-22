@@ -27,15 +27,20 @@ def pg_connection_str_fixture(_config_fixture: dict[str, typing.Hashable]) -> st
 
 @pytest.fixture(scope="function")
 def pg_connection_fixture(_root_dir_fixture: pathlib.Path, pg_connection_str_fixture: str) -> typing.Generator[connection, None, None]:
-    with psycopg2.connect(pg_connection_str_fixture) as con:
-        with con.cursor() as cur:
-            cur.execute("DROP SCHEMA IF EXISTS poa CASCADE;")
-            sql_path = _root_dir_fixture.parent / "setup.sql"
-            with sql_path.open("r") as fh:
-                sql = "\n".join(fh.readlines())
-            cur.execute(sql)
-        con.commit()
-        yield con
+    con = psycopg2.connect(pg_connection_str_fixture)
+    try:
+        with con:
+            with con.cursor() as cur:
+                cur.execute("DROP SCHEMA IF EXISTS poa CASCADE;")
+                sql_path = _root_dir_fixture.parent / "setup.sql"
+                with sql_path.open("r") as fh:
+                    sql = "\n".join(fh.readlines())
+                cur.execute(sql)
+            con.commit()
+            yield con
+    finally:
+        if not con.closed:
+            con.close()
 
 
 @pytest.fixture(scope="function")

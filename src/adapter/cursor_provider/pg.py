@@ -2,7 +2,6 @@ import contextlib
 import typing
 
 import psycopg2
-from psycopg2._psycopg import cursor  # noqa
 from psycopg2.extras import RealDictCursor
 
 from src import data
@@ -15,8 +14,14 @@ class PgCursorProvider(data.CursorProvider):
         self._connection_str = connection_str
 
     @contextlib.contextmanager
-    def open(self) -> typing.Generator[cursor, None, None]:
-        with psycopg2.connect(self._connection_str) as con:
-            with con.cursor(cursor_factory=RealDictCursor) as cur:
-                cur.execute("SET TIME ZONE 'UTC';")
-                yield cur
+    def open(self) -> typing.Generator[RealDictCursor, None, None]:
+        con = psycopg2.connect(self._connection_str, autocommit=True)
+        try:
+            with con:
+                with con.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute("SET SESSION idle_in_transaction_session_timeout = '15min';")
+                    cur.execute("SET SESSION lock_timeout = '5min';")
+                    cur.execute("SET SESSION TIME ZONE 'UTC';")
+                    yield cur
+        finally:
+            con.close()
