@@ -105,8 +105,8 @@ class PgDstDs(data.DstDs):
                 schema_name=self._dst_table.schema_name,
                 table_name=self._dst_table.table_name,
             )
-            key: data.RowKey = next(itertools.islice(keys, 1))
-            key_cols = sorted(key.keys())
+            first_key: data.RowKey = next(itertools.islice(keys, 1))
+            key_cols = sorted(first_key.keys())
             where_clause = " AND ".join(f"t.{_wrap_name(c)} = %({c})s" for c in key_cols)
             sql = textwrap.dedent(f"""
                 UPDATE {full_table_name} AS t 
@@ -157,7 +157,7 @@ class PgDstDs(data.DstDs):
                 for key, val in sorted_after
             ) + "\n)"
         self._cur.execute(sql, params)
-        return self._cur.fetchall()  # noqa
+        return [dict(row) for row in self._cur.fetchall()]
 
     def get_max_values(self, /, cols: set[str]) -> dict[str, typing.Hashable] | None:
         full_table_name = _generate_full_table_name(

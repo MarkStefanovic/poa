@@ -37,7 +37,11 @@ def _compare_rows(*, indexed_src_rows: dict[RowKey, Row], indexed_dst_rows: dict
             if any(1 for col_name, value in src_row.items() if value != dst_row[col_name]):
                 updated[key] = (src_row, dst_row)
 
-    deleted = {dst_key: dst_row for dst_key, dst_row in indexed_dst_rows.items() if dst_key not in indexed_src_rows}
+    deleted = {
+        dst_key: dst_row
+        for dst_key, dst_row in indexed_dst_rows.items()
+        if dst_key not in indexed_src_rows.keys()
+    }
 
     return RowDiff(added=added, updated=updated, deleted=deleted)
 
