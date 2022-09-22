@@ -100,6 +100,7 @@ class PgDstDs(data.DstDs):
         self._cur.execute(f"CREATE INDEX ix_{self._dst_table.table_name}_poa_op ON {full_table_name} (poa_op);")
 
     def delete_rows(self, /, keys: set[data.RowKey]) -> None:
+        print(f"{keys=}")
         if keys:
             full_table_name = _generate_full_table_name(
                 schema_name=self._dst_table.schema_name,
@@ -107,9 +108,9 @@ class PgDstDs(data.DstDs):
             )
             first_key: data.RowKey = next(itertools.islice(keys, 1))
             key_cols = sorted(first_key.keys())
-            where_clause = " AND ".join(f"t.{_wrap_name(c)} = %({c})s" for c in key_cols)
+            where_clause = " AND ".join(f"{_wrap_name(c)} = %({c})s" for c in key_cols)
             sql = textwrap.dedent(f"""
-                UPDATE {full_table_name} AS t 
+                UPDATE {full_table_name}
                 SET 
                     poa_op = 'd'
                 ,   poa_ts = now()
@@ -117,6 +118,7 @@ class PgDstDs(data.DstDs):
                     {where_clause}
                     AND poa_op <> 'd'
             """).strip()
+            print(f"{sql=}")
             self._cur.executemany(sql, keys)
 
     def drop_table(self) -> None:

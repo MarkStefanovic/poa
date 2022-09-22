@@ -15,7 +15,8 @@ class PgCursorProvider(data.CursorProvider):
 
     @contextlib.contextmanager
     def open(self) -> typing.Generator[RealDictCursor, None, None]:
-        con = psycopg2.connect(self._connection_str, autocommit=True)
+        con = psycopg2.connect(self._connection_str)
+        con.autocommit = True
         try:
             with con:
                 with con.cursor(cursor_factory=RealDictCursor) as cur:
