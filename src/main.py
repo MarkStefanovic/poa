@@ -486,4 +486,4 @@ if __name__ == '__main__':
             )
     except Exception as e:
         loguru.logger.exception(e)
-        raise
+        sys.exit(1)
