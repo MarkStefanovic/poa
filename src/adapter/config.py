@@ -11,6 +11,7 @@ from src import data
 
 __all__ = (
     "get_api",
+    "get_batch_size",
     "get_connection_str",
     "get_days_logs_to_keep",
     "get_seconds_between_cleanups",
@@ -28,6 +29,10 @@ def get_api(*, config_file: pathlib.Path, name: str) -> data.API:
         return data.API.PSYCOPG2
     else:
         raise data.error.UnrecognizedDatabaseAPI(api=api_str)
+
+
+def get_batch_size(*, config_file: pathlib.Path) -> int:
+    return typing.cast(int, _load(config_file=config_file)["batch-size"])
 
 
 @functools.lru_cache(maxsize=100)

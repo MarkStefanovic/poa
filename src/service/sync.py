@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import datetime
+import traceback
 import typing
+
+from loguru import logger
 
 from src import data
 
@@ -17,6 +20,7 @@ def sync(
     increasing_cols: set[str] | None,
     skip_if_row_counts_match: bool,
     recreate: bool,
+    batch_size: int,
 ) -> data.SyncResult:
     start_time = datetime.datetime.now()
     try:
@@ -41,6 +45,7 @@ def sync(
                     dst_ds=dst_ds,
                     compare_cols=compare_cols,
                     start_time=start_time,
+                    batch_size=batch_size,
                 )
             else:
                 assert increasing_cols is not None, "No increasing_cols were provided."
@@ -54,13 +59,14 @@ def sync(
                             dst_ds=dst_ds,
                             after=after,
                             start_time=start_time,
+                            batch_size=batch_size,
                         )
-                return _full_refresh(src_ds=src_ds, dst_ds=dst_ds, start_time=start_time)
+                return _full_refresh(src_ds=src_ds, dst_ds=dst_ds, start_time=start_time, batch_size=batch_size)
         else:
-            return _full_refresh(src_ds=src_ds, dst_ds=dst_ds, start_time=start_time)
+            return _full_refresh(src_ds=src_ds, dst_ds=dst_ds, start_time=start_time, batch_size=batch_size)
     except Exception as e:
         return data.SyncResult.failed(
-            error_message=f"An error occurred while running sync(): {e!s}\n{e.__traceback__}"
+            error_message=f"An error occurred while running sync(): {e!s}\n{traceback.format_exc()}"
         )
 
 
@@ -69,10 +75,18 @@ def _full_refresh(
     src_ds: data.SrcDs,
     dst_ds: data.DstDs,
     start_time: datetime.datetime,
+    batch_size: int,
 ) -> data.SyncResult:
     dst_ds.truncate()
+
     src_rows = src_ds.fetch_rows(col_names=None, after=None)
-    dst_ds.upsert_rows(src_rows)
+    rows_to_upsert = len(src_rows)
+    rows_upserted = 0
+    for chunk in iter_chunk(items=src_rows, n=batch_size):
+        logger.info(f"Upserting rows {rows_upserted} to {rows_upserted + len(chunk)} of {rows_to_upsert}...")
+        dst_ds.upsert_rows(chunk)
+        rows_upserted += len(chunk)
+
     execution_millis = int((datetime.datetime.now() - start_time).total_seconds() * 1000)
     return data.SyncResult.succeeded(
         rows_added=len(src_rows),
@@ -88,6 +102,7 @@ def _incremental_refresh_from_last(
     dst_ds: data.DstDs,
     after: dict[str, typing.Hashable] | None,
     start_time: datetime.datetime,
+    batch_size: int,
 ) -> data.SyncResult:
     assert after is not None, "after is required for _incremental_refresh_from_last, but got None."
     assert [1 for val in after.values() if val is not None], "after was empty."
@@ -103,10 +118,13 @@ def _incremental_refresh_from_last(
         key_cols=src_table.pk,
     )
 
-    dst_ds.upsert_rows(
-        list(row_diff.added.values()) +
-        list(src_row for src_row, dst_row in row_diff.updated.values())
-    )
+    rows = list(row_diff.added.values()) + list(src_row for src_row, dst_row in row_diff.updated.values())
+    rows_to_upsert = len(rows)
+    rows_upserted = 0
+    for chunk in iter_chunk(items=rows, n=batch_size):
+        logger.info(f"Upserting rows {rows_upserted} to {rows_upserted + len(chunk)} of {rows_to_upsert}...")
+        dst_ds.upsert_rows(chunk)
+        rows_upserted += len(chunk)
 
     execution_millis = int((datetime.datetime.now() - start_time).total_seconds() * 1000)
 
@@ -124,6 +142,7 @@ def _incremental_compare_refresh(
     dst_ds: data.DstDs,
     compare_cols: set[str] | None,
     start_time: datetime.datetime,
+    batch_size: int,
 ) -> data.SyncResult:
     assert compare_cols, "compare_cols was empty."
 
@@ -148,29 +167,46 @@ def _incremental_compare_refresh(
         key_cols=src_table.pk,
     )
 
-    added_keys = set(row_diff.added.keys())
+    changed_keys = set(row_diff.added.keys()).union(row_diff.updated.keys())
     deleted_keys = set(row_diff.deleted.keys())
-    updated_keys = set(row_diff.updated.keys())
 
-    chg_row_ct = len(added_keys) + len(deleted_keys) + len(updated_keys)
+    logger.info(
+        f"There were {len(row_diff.added.keys())} rows added, {len(row_diff.updated.keys())} updated, "
+        f"and {len(row_diff.deleted.keys())} rows deleted from src."
+    )
+
+    chg_row_ct = len(changed_keys) + len(deleted_keys)
 
     if chg_row_ct == 0:
         return data.SyncResult.skipped(reason="src and dst were compared, and they were the same.")
 
-    chg_pct = chg_row_ct/src_row_ct
-    if chg_row_ct > 1000 and chg_pct > 0.3:
-        return _full_refresh(src_ds=src_ds, dst_ds=dst_ds, start_time=start_time)
-
-    if added_keys or updated_keys:
-        upsert_rows = src_ds.fetch_rows_by_key(
-            col_names=None,
-            keys=added_keys.union(updated_keys),
+    if chg_row_ct > 3_000 and src_row_ct < 1_000_000:
+        logger.info(f"There were {chg_row_ct} changed rows, so the full table will be pulled.")
+        src_rows = src_ds.fetch_rows(col_names=None, after=None)
+    elif (proportion_chg := chg_row_ct/src_row_ct) > 0.5:
+        logger.info(
+            f"There were {chg_row_ct} rows that have changed of {src_row_ct} totals rows "
+            f"({int(proportion_chg * 100)}%), so the full table will be pulled."
         )
+        src_rows = src_ds.fetch_rows(col_names=None, after=None)
+    else:
+        src_rows = src_ds.fetch_rows_by_key(col_names=None, keys=changed_keys)
 
-        dst_ds.upsert_rows(upsert_rows)
+    if src_rows:
+        rows_to_upsert = len(src_rows)
+        rows_upserted = 0
+        for chunk in iter_chunk(items=src_rows, n=batch_size):
+            logger.info(f"Upserting rows {rows_upserted} to {rows_upserted + len(chunk)} of {rows_to_upsert}...")
+            dst_ds.upsert_rows(chunk)
+            rows_upserted += len(chunk)
 
     if deleted_keys:
-        dst_ds.delete_rows(keys=deleted_keys)
+        keys_to_delete = len(deleted_keys)
+        keys_deleted = 0
+        for chunk in iter_chunk(items=list(deleted_keys), n=batch_size):
+            logger.info(f"Deleting rows {keys_deleted} to {keys_deleted + len(chunk)} of {keys_to_delete}...")
+            dst_ds.delete_rows(keys=set(chunk))
+            keys_deleted += len(chunk)
 
     execution_millis = int((datetime.datetime.now() - start_time).total_seconds() * 1000)
 
@@ -180,3 +216,8 @@ def _incremental_compare_refresh(
         rows_updated=len(row_diff.updated),
         execution_millis=execution_millis,
     )
+
+
+def iter_chunk(items: list[typing.Any], n: int) -> typing.Generator[typing.Any, None, None]:
+    for i in range(0, len(items), n):
+        yield items[i:i + n]

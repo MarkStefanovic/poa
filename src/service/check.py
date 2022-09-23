@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime
+import traceback
 
 from src import data
 
@@ -52,5 +53,5 @@ def check(
         raise data.error.CheckError(
             f"An error occurred while running check(src_ds=..., dst_ds=..., {src_db_name=!r}, "
             f"{src_schema_name=!r}, {src_table_name=!r}, {dst_db_name=!r}, {dst_schema_name=!r}, "
-            f"{dst_table_name=!r}): {e!s}\n{e.__traceback__}"
+            f"{dst_table_name=!r}): {e!s}\n{traceback.format_exc()}"
         )

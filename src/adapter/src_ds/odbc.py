@@ -70,7 +70,7 @@ class OdbcSrcDs(data.SrcDs):
             if col_names:
                 cols = sorted(col_names)
             else:
-                cols = sorted({c.name for c in self.get_table().columns})
+                cols = sorted(c.name for c in self.get_table().columns)
 
             sql = "SELECT\n  "
             sql += "\n, ".join(_wrap_col_name_w_alias(wrapper=self._wrapper, col_name=col) for col in cols)

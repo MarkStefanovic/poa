@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import dataclasses
+import datetime
 import itertools
 import operator
 import textwrap
@@ -23,9 +24,11 @@ class PgDstDs(data.DstDs):
         dst_schema_name: str | None,
         dst_table_name: str,
         src_table: data.Table,
+        batch_ts: datetime.datetime,
     ):
         self._cur = cur
         self._src_table = src_table
+        self._batch_ts = batch_ts
 
         self._dst_table = dataclasses.replace(
             src_table,
@@ -100,7 +103,6 @@ class PgDstDs(data.DstDs):
         self._cur.execute(f"CREATE INDEX ix_{self._dst_table.table_name}_poa_op ON {full_table_name} (poa_op);")
 
     def delete_rows(self, /, keys: set[data.RowKey]) -> None:
-        print(f"{keys=}")
         if keys:
             full_table_name = _generate_full_table_name(
                 schema_name=self._dst_table.schema_name,
@@ -113,13 +115,12 @@ class PgDstDs(data.DstDs):
                 UPDATE {full_table_name}
                 SET 
                     poa_op = 'd'
-                ,   poa_ts = now()
+                ,   poa_ts = %(batch_ts)s
                 WHERE 
                     {where_clause}
                     AND poa_op <> 'd'
             """).strip()
-            print(f"{sql=}")
-            self._cur.executemany(sql, keys)
+            self._cur.executemany(sql, (key | {"batch_ts": self._batch_ts} for key in keys))
 
     def drop_table(self) -> None:
         full_table_name = _generate_full_table_name(
@@ -222,7 +223,7 @@ class PgDstDs(data.DstDs):
             set_values_csv = "\n, ".join(
                 f"{_wrap_name(c)} = EXCLUDED.{_wrap_name(c)}"
                 for c in col_names if c not in self._dst_table.pk
-            ) + "\n, poa_hd = EXCLUDED.poa_hd, poa_op = 'u'\n, poa_ts = now()"
+            ) + "\n, poa_hd = EXCLUDED.poa_hd, poa_op = 'u'\n, poa_ts = %(batch_ts)s"
 
             if self._dst_table.schema_name:
                 full_table_name = f"{_wrap_name(self._dst_table.schema_name)}.{_wrap_name(self._dst_table.table_name)}"
@@ -242,7 +243,7 @@ class PgDstDs(data.DstDs):
                     OR {full_table_name}.poa_op = 'd'
                 RETURNING poa_op
             """).strip()
-            self._cur.executemany(sql, rows)
+            self._cur.executemany(sql, ({"batch_ts": self._batch_ts} | row for row in rows))
 
 
 def _generate_column_definition(*, col: data.Column) -> str:

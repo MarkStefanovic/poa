@@ -1,6 +1,7 @@
 {
   "get-seconds-between-cleanups":  1800,
   "days-logs-to-keep": 3,
+  "batch-size": 1000,
   "ds": {
     "pg-example": {
       "api": "psycopg2",

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import traceback
+
 from loguru import logger
 
 from src import data
@@ -21,7 +23,7 @@ class PgLog(data.Log):
         except Exception as e:
             self.error(
                 f"An error occurred while running delete_old_logs({days_to_keep=!r}): "
-                f"{e!s}\n{e.__traceback__}"
+                f"{e!s}\n{traceback.format_exc()}"
             )
             raise
 
@@ -46,7 +48,7 @@ class PgLog(data.Log):
         except Exception as e:
             self.error(
                 f"An error occurred while running sync_failed({sync_id=!r}, {reason=!r}): "
-                f"{e!s}\n{e.__traceback__}"
+                f"{e!s}\n{traceback.format_exc()}"
             )
             raise
 
@@ -60,7 +62,7 @@ class PgLog(data.Log):
         except Exception as e:
             self.error(
                 f"An error occurred while running sync_skipped({sync_id=!r}, {reason=!r}): "
-                f"{e!s}\n{e.__traceback__}"
+                f"{e!s}\n{traceback.format_exc()}"
             )
             raise
 
@@ -94,7 +96,7 @@ class PgLog(data.Log):
         except Exception as e:
             self.error(
                 f"An error occurred while running sync_started({src_db_name=!r}, {src_schema_name=!r}, "
-                f"{src_table_name=!r}, {incremental=!r}): {e!s}\n{e.__traceback__}"
+                f"{src_table_name=!r}, {incremental=!r}): {e!s}\n{traceback.format_exc()}"
             )
             raise
 
@@ -130,6 +132,6 @@ class PgLog(data.Log):
         except Exception as e:
             self.error(
                 f"An error occurred while running sync_succeeded({sync_id=!r}, {execution_millis=!r}): "
-                f"{e!s}\n{e.__traceback__}"
+                f"{e!s}\n{traceback.format_exc()}"
             )
             raise

@@ -1,3 +1,5 @@
+import datetime
+
 from psycopg2._psycopg import connection, cursor
 
 from src import data, service
@@ -43,6 +45,7 @@ def test_incremental_sync_using_increasing_method(pg_connection_fixture: connect
             dst_schema_name="sales",
             dst_table_name="customer",
             src_table=src_table,
+            batch_ts=datetime.datetime(2010, 1, 2),
         )
 
         service.sync(
@@ -53,6 +56,7 @@ def test_incremental_sync_using_increasing_method(pg_connection_fixture: connect
             increasing_cols={"date_added", "date_updated"},
             skip_if_row_counts_match=True,
             recreate=False,
+            batch_size=100,
         )
 
 

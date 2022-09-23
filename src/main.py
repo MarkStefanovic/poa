@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import argparse
+import datetime
 import pathlib
 import sys
+import traceback
 
 import loguru
 
@@ -18,6 +20,7 @@ def check(
     dst_table_name: str,
     pk: list[str],
     log_folder: pathlib.Path,
+    batch_ts: datetime.datetime,
 ) -> None:
     try:
         if src_schema_name:
@@ -83,6 +86,7 @@ def check(
                     dst_schema_name=dst_schema_name,
                     dst_table_name=dst_table_name,
                     src_table=src_table,
+                    batch_ts=batch_ts,
                 )
                 result = service.check(
                     src_ds=src_ds,
@@ -99,13 +103,13 @@ def check(
         except Exception as e1:
             log.error(
                 f"An error occurred while running check({src_db_name=!r}, {src_schema_name=!r}, "
-                f"{src_table_name=!r}, {dst_db_name=!r}, {dst_schema_name=!r}, {e1!s}\n{e1.__traceback__}"
+                f"{src_table_name=!r}, {dst_db_name=!r}, {dst_schema_name=!r}, {e1!s}\n{traceback.format_exc()}"
             )
             raise
     except Exception as e2:
         loguru.logger.error(
             f"An error occurred while running check({src_db_name=!r}, {src_schema_name=!r}, "
-            f"{src_table_name=!r}, {dst_db_name=!r}, {dst_schema_name=!r}): {e2!s}\n{e2.__traceback__}"
+            f"{src_table_name=!r}, {dst_db_name=!r}, {dst_schema_name=!r}): {e2!s}\n{traceback.format_exc()}"
         )
         raise
 
@@ -130,13 +134,13 @@ def cleanup(*, db_name: str, log_folder: pathlib.Path, days_logs_to_keep: int = 
         except Exception as e1:
             log.error(
                 f"An error occurred while running service.cleanup({db_name=!r}, log_folder=..., {days_logs_to_keep=!r}): "
-                f"{e1!s}\n{e1.__traceback__}"
+                f"{e1!s}\n{traceback.format_exc()}"
             )
             raise
     except Exception as e2:
         loguru.logger.error(
             f"An error occurred while running cleanup({db_name=!r}, log_folder=..., {days_logs_to_keep=!r}): "
-            f"{e2!s}\n{e2.__traceback__}")
+            f"{e2!s}\n{traceback.format_exc()}")
         raise
 
 
@@ -187,7 +191,7 @@ def inspect(
         loguru.logger.error(
             f"An error occurred while running inspect({src_db_name=!r}, {src_schema_name=!r}, "
             f"{src_table_name=!r}, {cache_db_name=!r}, {pk=!r}, log_folder='"
-            f"{log_folder.resolve()!s}'): {ie!s}\n{ie.__traceback__}"
+            f"{log_folder.resolve()!s}'): {ie!s}\n{traceback.format_exc()}"
         )
         raise
 
@@ -206,6 +210,7 @@ def sync(
     skip_if_row_counts_match: bool,
     recreate: bool,
     log_folder: pathlib.Path,
+    batch_ts: datetime.datetime,
 ) -> None:
     try:
         if src_schema_name:
@@ -281,7 +286,10 @@ def sync(
                     dst_schema_name=dst_schema_name,
                     dst_table_name=dst_table_name,
                     src_table=src_table,
+                    batch_ts=batch_ts,
                 )
+
+                batch_size = adapter.config.get_batch_size(config_file=config_file)
 
                 result = service.sync(
                     src_ds=src_ds,
@@ -291,6 +299,7 @@ def sync(
                     increasing_cols=increasing_cols,
                     skip_if_row_counts_match=skip_if_row_counts_match,
                     recreate=recreate,
+                    batch_size=batch_size,
                 )
 
                 if result.status == "succeeded":
@@ -302,6 +311,7 @@ def sync(
                         execution_millis=result.execution_millis or 0,
                     )
                 elif result.status == "failed":
+                    loguru.logger.error(result.error_message or "No error message was provided.")
                     log.sync_failed(sync_id=sync_id, reason=result.error_message or "No error message was provided.")
                 elif result.status == "skipped":
                     log.sync_skipped(sync_id=sync_id, reason=result.skip_reason or "No skip reason was provided.")
@@ -313,7 +323,7 @@ def sync(
                 reason=(
                     f"An error occurred while running sync({src_db_name=!r}, {src_schema_name=!r}, "
                     f"{src_table_name=!r}, {dst_db_name=!r}, {dst_schema_name=!r}, {incremental=}): "
-                    f"{e1!s}\n{e1.__traceback__}"
+                    f"{e1!s}\n{traceback.format_exc()}"
                 ),
             )
             raise
@@ -321,12 +331,14 @@ def sync(
         loguru.logger.error(
             f"An error occurred while running sync({src_db_name=!r}, {src_schema_name=!r}, "
             f"{src_table_name=!r}, {dst_db_name=!r}, {dst_schema_name=!r}, {incremental=}): "
-            f"{e2!s}\n{e2.__traceback__}"
+            f"{e2!s}\n{traceback.format_exc()}"
         )
         raise
 
 
 if __name__ == '__main__':
+    batch_ts = datetime.datetime.utcnow()
+
     logging_folder = adapter.fs.get_log_folder()
 
     loguru.logger.remove()
@@ -403,6 +415,7 @@ if __name__ == '__main__':
                 dst_table_name=args.dst_table,
                 pk=args.pk,
                 log_folder=logging_folder,
+                batch_ts=batch_ts,
             )
         elif args.command == "cleanup":
             assert args.db, "--db is required"
@@ -434,6 +447,7 @@ if __name__ == '__main__':
                 skip_if_row_counts_match=False,
                 recreate=args.recreate,
                 log_folder=logging_folder,
+                batch_ts=batch_ts,
             )
         elif args.command == "incremental-sync":
             assert args.src_db, "--src-db is required."
@@ -469,6 +483,7 @@ if __name__ == '__main__':
                 skip_if_row_counts_match=args.skip_if_row_counts_match,
                 recreate=False,
                 log_folder=logging_folder,
+                batch_ts=batch_ts,
             )
         elif args.command == "inspect":
             assert args.pk, "--pk is required."
@@ -486,4 +501,4 @@ if __name__ == '__main__':
             )
     except Exception as e:
         loguru.logger.exception(e)
-        raise
+        sys.exit(1)
