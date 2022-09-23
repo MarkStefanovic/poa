@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import itertools
+import textwrap
 import typing
 
 from psycopg2.extras import RealDictCursor
@@ -92,7 +93,55 @@ class PgSrcDs(data.SrcDs):
         if not self.table_exists():
             raise data.error.TableDoesntExist(table_name=self._table_name, schema_name=self._schema_name)
 
-        # TODO
+        sql = textwrap.dedent(
+            """
+            SELECT
+                c.column_name
+            ,   c.is_nullable = 'YES' AS nullable
+            ,   c.data_type
+            ,   c.character_maximum_length AS max_length
+            ,   c.numeric_precision AS precision
+            ,   c.numeric_scale AS scale
+            FROM information_schema.columns AS c
+            WHERE
+                c.table_schema = %(schema_name)s
+                AND c.table_name = %(table_name)s
+            ;
+            """
+        ).strip()
+        self._cur.execute(sql, {"schema_name": self._schema_name, "table_name": self._table_name})
+
+        cols: list[data.Column] = []
+        if result := self._cur.fetchall():
+            result = typing.cast(list[dict[str, typing.Any]], result)
+            for row in result:
+                col = data.Column(
+                    name=row["column_name"],
+                    data_type=_lookup_data_type(row["data_type"]),
+                    nullable=row["nullable"],
+                    length=row["max_length"],
+                    precision=row["precision"],
+                    scale=row["scale"],
+                )
+                cols.append(col)
+        else:
+            raise data.error.TableDoesntExist(schema_name=self._schema_name, table_name=self._table_name)
+
+        pk = _get_pk_for_table(
+            cur=self._cur,
+            schema_name=self._schema_name,
+            table_name=self._table_name,
+        )
+
+        assert pk is not None, f"No primary key was found for the table, {self._schema_name}.{self._table_name}."
+
+        return data.Table(
+            db_name=self._db_name,
+            schema_name=self._schema_name,
+            table_name=self._table_name,
+            pk=pk,
+            columns=frozenset(cols),
+        )
 
     def table_exists(self) -> bool:
         self._cur.execute(
@@ -108,6 +157,59 @@ class PgSrcDs(data.SrcDs):
             {"schema_name": self._schema_name, "table_name": self._table_name}
         )
         return self._cur.fetchone()["ct"] > 0  # noqa
+
+
+def _get_pk_for_table(*, cur: RealDictCursor, schema_name: str, table_name: str) -> tuple[str, ...] | None:
+    sql = textwrap.dedent("""
+        SELECT
+            c.column_name
+        ,   c.data_type
+        FROM information_schema.table_constraints AS tc
+        JOIN information_schema.constraint_column_usage AS ccu
+            ON tc.constraint_schema = ccu.constraint_schema
+            AND tc.constraint_name = ccu.constraint_name
+        JOIN information_schema.columns AS c
+            ON c.table_schema = tc.constraint_schema
+            AND tc.table_name = c.table_name
+            AND ccu.column_name = c.column_name
+        WHERE
+            constraint_type = 'PRIMARY KEY'
+            AND tc.table_schema = %(schema_name)s
+            AND tc.table_name = %(table_name)s
+        ;
+    """).strip()
+    cur.execute(sql, {"schema_name": schema_name, "table_name": table_name})
+    if result := cur.fetchall():
+        result = typing.cast(list[dict[str, typing.Any]], result)
+        return tuple(row["column_name"] for row in result)
+    return None
+
+
+def _lookup_data_type(type_name: str, /) -> data.DataType:
+    if type_name in {
+        "anyarray", "ARRAY", "bytea", "inet", "interval", "jsonb", "name", "pg_dependencies",
+        "pg_lsn", "pg_mcv_list", "pg_ndistinct", "pg_node_tree", "regproc", "regtype",
+        "USER-DEFINED", "xid",
+    }:
+        raise NotImplementedError(f"The data type {type_name} is not supported.")
+
+    return {
+        '"char"': data.DataType.Text,
+        'bigint': data.DataType.BigInt,
+        'boolean': data.DataType.Bool,
+        'character': data.DataType.Text,
+        'character varying': data.DataType.Text,
+        'date': data.DataType.Date,
+        'double precision': data.DataType.BigInt,
+        'integer': data.DataType.Int,
+        'numeric': data.DataType.Decimal,
+        'oid': data.DataType.Int,
+        'real': data.DataType.Float,
+        'smallint': data.DataType.Int,
+        'text': data.DataType.Text,
+        'timestamp with time zone': data.DataType.TimestampTZ,
+        'timestamp without time zone': data.DataType.Timestamp,
+    }[type_name]
 
 
 def _wrapper(name: str, /) -> str:

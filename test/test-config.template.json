@@ -1,5 +1,19 @@
 {
-  "hh-connection-str": "DSN=testdb",
-  "hh-schema-name": "test_schema",
-  "pg-connection-str": "host='localhost' dbname='testdb' user='postgres' password='secret'"
+  "get-seconds-between-cleanups":  1800,
+  "days-logs-to-keep": 3,
+  "ds": {
+    "pg": {
+      "api": "psycopg2",
+      "connection-string": "host='localhost' dbname='testdb' user='postgres' password='secret'"
+    },
+    "mssql": {
+      "api": "pyodbc",
+      "connection-string": "Driver={SQL Server};Server=server_name;Database=database_name;Trusted_Connection=yes;"
+    },
+    "hh": {
+      "api": "hh",
+      "connection-string": ""
+    }
+  },
+  "hh-schema-name": "rpt"
 }

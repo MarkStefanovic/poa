@@ -15,14 +15,14 @@ def _root_dir_fixture(request) -> pathlib.Path:
 
 
 @pytest.fixture(scope="function")
-def _config_fixture(_root_dir_fixture: pathlib.Path) -> dict[str, typing.Hashable]:
+def _config_fixture(_root_dir_fixture: pathlib.Path) -> dict[str, typing.Any]:
     with (_root_dir_fixture / "test-config.json").open("r") as fh:
         return json.load(fh)
 
 
 @pytest.fixture(scope="function")
-def pg_connection_str_fixture(_config_fixture: dict[str, typing.Hashable]) -> str:
-    return typing.cast(str, _config_fixture["pg-connection-str"])
+def pg_connection_str_fixture(_config_fixture: dict[str, typing.Any]) -> str:
+    return typing.cast(str, _config_fixture["ds"]["pg"]["connection-string"])
 
 
 @pytest.fixture(scope="function")
@@ -50,12 +50,12 @@ def pg_cursor_fixture(pg_connection_fixture: connection) -> typing.Generator[Rea
 
 
 @pytest.fixture(scope="function")
-def hh_connection_str_fixture(_config_fixture: dict[str, typing.Hashable]) -> str:
-    return typing.cast(str, _config_fixture["hh-connection-str"])
+def hh_connection_str_fixture(_config_fixture: dict[str, typing.Any]) -> str:
+    return typing.cast(str, _config_fixture["ds"]["hh"]["connection-string"])
 
 
 @pytest.fixture(scope="function")
-def hh_schema_name(_config_fixture: dict[str, typing.Hashable]) -> str:
+def hh_schema_name(_config_fixture: dict[str, typing.Any]) -> str:
     return typing.cast(str, _config_fixture["hh-schema-name"])
 
 
