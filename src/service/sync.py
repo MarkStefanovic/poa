@@ -180,10 +180,7 @@ def _incremental_compare_refresh(
     if chg_row_ct == 0:
         return data.SyncResult.skipped(reason="src and dst were compared, and they were the same.")
 
-    if chg_row_ct > 3_000 and src_row_ct < 1_000_000:
-        logger.info(f"There were {chg_row_ct} changed rows, so the full table will be pulled.")
-        src_rows = src_ds.fetch_rows(col_names=None, after=None)
-    elif (proportion_chg := chg_row_ct/src_row_ct) > 0.5:
+    if (proportion_chg := chg_row_ct/src_row_ct) > 0.5:
         logger.info(
             f"There were {chg_row_ct} rows that have changed of {src_row_ct} totals rows "
             f"({int(proportion_chg * 100)}%), so the full table will be pulled."
