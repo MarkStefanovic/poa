@@ -211,6 +211,7 @@ def sync(
     recreate: bool,
     log_folder: pathlib.Path,
     batch_ts: datetime.datetime,
+    track_history: bool,
 ) -> None:
     try:
         if src_schema_name:
@@ -300,6 +301,7 @@ def sync(
                     skip_if_row_counts_match=skip_if_row_counts_match,
                     recreate=recreate,
                     batch_size=batch_size,
+                    track_history=track_history,
                 )
 
                 if result.status == "succeeded":
@@ -374,6 +376,7 @@ if __name__ == '__main__':
         full_sync_parser.add_argument("--dst-table", type=str, required=True)
         full_sync_parser.add_argument("--pk", nargs="+")
         full_sync_parser.add_argument("--recreate", action="store_true")
+        full_sync_parser.add_argument("--track-history", action="store_true")
 
         incremental_sync_parser.add_argument("--src-db", type=str, required=True)
         incremental_sync_parser.add_argument("--src-schema", type=str, required=True)
@@ -386,6 +389,7 @@ if __name__ == '__main__':
         incremental_strategy_options.add_argument("--compare", nargs="+")
         incremental_strategy_options.add_argument("--increasing", nargs="+")
         incremental_sync_parser.add_argument("--skip-if-row-counts-match", action="store_true")
+        incremental_sync_parser.add_argument("--track-history", action="store_true")
 
         inspect_parser.add_argument("--src-db", type=str, required=True)
         inspect_parser.add_argument("--src-schema", type=str, required=True)
@@ -448,6 +452,7 @@ if __name__ == '__main__':
                 recreate=args.recreate,
                 log_folder=logging_folder,
                 batch_ts=batch_ts,
+                track_history=args.track_history,
             )
         elif args.command == "incremental-sync":
             assert args.src_db, "--src-db is required."
@@ -484,6 +489,7 @@ if __name__ == '__main__':
                 recreate=False,
                 log_folder=logging_folder,
                 batch_ts=batch_ts,
+                track_history=args.track_history,
             )
         elif args.command == "inspect":
             assert args.pk, "--pk is required."

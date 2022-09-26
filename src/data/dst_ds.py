@@ -24,6 +24,10 @@ class DstDs(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
+    def create_history_table(self) -> None:
+        raise NotImplementedError
+
+    @abc.abstractmethod
     def delete_rows(self, *, keys: set[RowKey]) -> None:
         raise NotImplementedError
 
@@ -54,6 +58,10 @@ class DstDs(abc.ABC):
 
     @abc.abstractmethod
     def truncate(self) -> None:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def update_history_table(self) -> None:
         raise NotImplementedError
 
     @abc.abstractmethod

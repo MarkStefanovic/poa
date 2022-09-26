@@ -47,7 +47,7 @@ class PgSrcDs(data.SrcDs):
         else:
             self._cur.execute(sql)
 
-        return [dict(zip(cols, row)) for row in self._cur.fetchall()]
+        return [dict(row) for row in self._cur.fetchall()]
 
     def fetch_rows_by_key(self, *, col_names: set[str] | None, keys: set[data.RowKey]) -> list[data.Row]:
         if keys:

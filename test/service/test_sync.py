@@ -1,3 +1,6 @@
+import datetime
+import typing
+
 from psycopg2._psycopg import connection
 from psycopg2.extras import RealDictCursor
 
@@ -6,7 +9,7 @@ from src.adapter.dst_ds.pg import PgDstDs
 from src.adapter.src_ds.pg import PgSrcDs
 
 
-def test_incremental_sync_using_increasing_method(pg_connection_fixture: connection):
+def test_incremental_sync_using_increasing_method_when_dst_does_not_exist(pg_connection_fixture: connection):
     with pg_connection_fixture.cursor(cursor_factory=RealDictCursor) as cur:
         src_db_name = "pg"
         src_schema_name = "poa"
@@ -42,15 +45,18 @@ def test_incremental_sync_using_increasing_method(pg_connection_fixture: connect
             table_name=src_table_name,
         )
 
+        batch_ts = datetime.datetime(2010, 1, 2)
+
         dst_ds = PgDstDs(
             cur=cur,
             dst_db_name=dst_db_name,
             dst_schema_name=dst_schema_name,
             dst_table_name=dst_table_name,
             src_table=src_table,
+            batch_ts=batch_ts,
         )
 
-        service.sync(
+        result = service.sync(
             src_ds=src_ds,
             dst_ds=dst_ds,
             incremental=True,
@@ -58,7 +64,15 @@ def test_incremental_sync_using_increasing_method(pg_connection_fixture: connect
             increasing_cols={"date_added", "date_updated"},
             skip_if_row_counts_match=True,
             recreate=False,
+            batch_size=1000,
+            track_history=False,
         )
+
+        assert result.status == "succeeded", f"sync failed: {result!r}"
+
+        cur.execute("SELECT first_name, last_name FROM poa.dst_customer;")
+        customer_ids = {(row["first_name"], row["last_name"]) for row in cur.fetchall()}  # type: ignore
+        assert customer_ids == {('Bill', 'Button'), ('Mandie', 'Mandlebrot'), ('Steve', 'Smith')}
 
 
 def _create_customer_table(*, cur: RealDictCursor, db_name: str, schema_name: str, table_name: str) -> data.Table:

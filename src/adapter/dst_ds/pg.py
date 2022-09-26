@@ -102,6 +102,30 @@ class PgDstDs(data.DstDs):
         self._cur.execute(f"CREATE INDEX ix_{self._dst_table.table_name}_poa_ts ON {full_table_name} (poa_ts DESC);")
         self._cur.execute(f"CREATE INDEX ix_{self._dst_table.table_name}_poa_op ON {full_table_name} (poa_op);")
 
+    def create_history_table(self) -> None:
+        full_table_name = _generate_full_table_name(
+            schema_name=self._dst_table.schema_name,
+            table_name=self._dst_table.table_name + "_history",
+        )
+
+        sql = f"CREATE TABLE IF NOT EXISTS {full_table_name} (\n  "
+        sql += "\n, ".join(
+            _generate_column_definition(col=col)
+            for col in sorted(self._dst_table.columns, key=operator.attrgetter("name"))
+        )
+        sql += (
+            "\n, poa_hd CHAR(32) NOT NULL"
+            "\n, poa_op CHAR(1) NOT NULL CHECK (poa_op IN ('a', 'd', 'u'))"
+            "\n, poa_ts TIMESTAMPTZ(3) NOT NULL DEFAULT now()"
+            "\n, PRIMARY KEY (" + ", ".join(_wrap_name(col) for col in self._dst_table.pk) + ", poa_ts)"
+            "\n);"
+        )
+
+        self._cur.execute(sql)
+
+        self._cur.execute(f"CREATE INDEX IF NOT EXISTS ix_{self._dst_table.table_name}_history_poa_ts ON {full_table_name} (poa_ts DESC);")
+        self._cur.execute(f"CREATE INDEX IF NOT EXISTS ix_{self._dst_table.table_name}_history_poa_op ON {full_table_name} (poa_op);")
+
     def delete_rows(self, /, keys: set[data.RowKey]) -> None:
         if keys:
             full_table_name = _generate_full_table_name(
@@ -206,6 +230,38 @@ class PgDstDs(data.DstDs):
             table_name=self._dst_table.table_name,
         )
         self._cur.execute(f"TRUNCATE {full_table_name}")
+
+    def update_history_table(self) -> None:
+        col_names = sorted({c.name for c in self._dst_table.columns}) + ["poa_hd", "poa_op", "poa_ts"]
+
+        col_name_csv = ", ".join(_wrap_name(c) for c in col_names)
+
+        if self._dst_table.schema_name:
+            full_dst_table_name = f"{_wrap_name(self._dst_table.schema_name)}.{_wrap_name(self._dst_table.table_name)}"
+            full_history_table_name = f"{_wrap_name(self._dst_table.schema_name)}.{self._dst_table.table_name}_history"
+        else:
+            full_dst_table_name = _wrap_name(self._dst_table.table_name)
+            full_history_table_name = f"{self._dst_table.table_name}_history"
+
+        pks_match = " AND ".join(f"d.{col} = h.{col}" for col in self._dst_table.pk + ("poa_ts",))
+
+        sql = textwrap.dedent(f"""
+            INSERT INTO {full_history_table_name}
+                ({col_name_csv})
+            SELECT
+                {col_name_csv}
+            FROM {full_dst_table_name} AS d
+            WHERE
+                NOT EXISTS (
+                    SELECT 1 
+                    FROM {full_history_table_name} AS h
+                    WHERE
+                        {pks_match}
+                )
+            ;
+        """).strip()
+
+        self._cur.execute(sql)
 
     def upsert_rows(self, /, rows: typing.Iterable[data.Row]) -> None:
         if rows:

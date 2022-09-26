@@ -36,6 +36,7 @@ def test_create(pg_cursor_fixture: RealDictCursor, customer_table_fixture: data.
         dst_schema_name="poa",
         dst_table_name="src_sales_customer",
         src_table=customer_table_fixture,
+        batch_ts=datetime.datetime.now(),
     )
     ds.create()
     assert _customer_table_exists(cur=pg_cursor_fixture), "The table was not created after create()."
@@ -57,6 +58,7 @@ def test_delete_rows(pg_cursor_fixture: RealDictCursor, customer_table_fixture: 
         dst_schema_name="poa",
         dst_table_name="src_sales_customer",
         src_table=customer_table_fixture,
+        batch_ts=datetime.datetime.now(),
     )
     ds.delete_rows(keys={data.FrozenDict({"customer_id": 2})})
     pg_cursor_fixture.execute("SELECT poa_op FROM poa.src_sales_customer WHERE customer_id = 2")
@@ -79,6 +81,7 @@ def test_fetch_rows_when_after_is_none(pg_cursor_fixture: RealDictCursor, custom
         dst_schema_name="poa",
         dst_table_name="src_sales_customer",
         src_table=customer_table_fixture,
+        batch_ts=datetime.datetime.now(),
     )
     rows = ds.fetch_rows(col_names={"first_name", "last_name"}, after=None)
     assert rows == [
@@ -104,6 +107,7 @@ def test_fetch_rows_when_after_is_not_none(pg_cursor_fixture: RealDictCursor, cu
         dst_schema_name="poa",
         dst_table_name="src_sales_customer",
         src_table=customer_table_fixture,
+        batch_ts=datetime.datetime.now(),
     )
     rows = ds.fetch_rows(
         col_names={"first_name", "last_name"},
@@ -131,6 +135,7 @@ def test_get_max_values(pg_cursor_fixture: RealDictCursor, customer_table_fixtur
         dst_schema_name="poa",
         dst_table_name="src_sales_customer",
         src_table=customer_table_fixture,
+        batch_ts=datetime.datetime.now(),
     )
     rows = ds.get_max_values({"date_added", "date_deleted"})
     assert rows == {
@@ -155,6 +160,7 @@ def test_get_row_count(pg_cursor_fixture: RealDictCursor, customer_table_fixture
         dst_schema_name="poa",
         dst_table_name="src_sales_customer",
         src_table=customer_table_fixture,
+        batch_ts=datetime.datetime.now(),
     )
     rows = ds.get_row_count()
     assert rows == 3
@@ -168,6 +174,7 @@ def test_table_exists(pg_cursor_fixture: RealDictCursor, customer_table_fixture:
         dst_schema_name="poa",
         dst_table_name="src_sales_customer",
         src_table=customer_table_fixture,
+        batch_ts=datetime.datetime.now(),
     )
     assert ds.table_exists()
 
@@ -191,6 +198,7 @@ def test_truncate(pg_cursor_fixture: RealDictCursor, customer_table_fixture: dat
         dst_schema_name="poa",
         dst_table_name="src_sales_customer",
         src_table=customer_table_fixture,
+        batch_ts=datetime.datetime.now(),
     )
     ds.truncate()
     pg_cursor_fixture.execute("SELECT COUNT(*) AS ct FROM poa.src_sales_customer")
@@ -217,6 +225,7 @@ def test_upsert_rows(pg_cursor_fixture: RealDictCursor, customer_table_fixture: 
         dst_schema_name="poa",
         dst_table_name="src_sales_customer",
         src_table=customer_table_fixture,
+        batch_ts=datetime.datetime.now(),
     )
     rows = [
         {"birth_date": datetime.date(1912, 3, 4), "customer_id": 1, "date_added": datetime.datetime(2010, 1, 2), "date_deleted": None, "first_name": "Steve", "last_name": "Smith", "middle_name": "S", "purchases": 2345.67},

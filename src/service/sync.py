@@ -21,6 +21,7 @@ def sync(
     skip_if_row_counts_match: bool,
     recreate: bool,
     batch_size: int,
+    track_history: bool,
 ) -> data.SyncResult:
     start_time = datetime.datetime.now()
     try:
@@ -40,7 +41,7 @@ def sync(
                     return data.SyncResult.skipped(reason="row counts match.")
 
             if compare_cols:
-                return _incremental_compare_refresh(
+                result = _incremental_compare_refresh(
                     src_ds=src_ds,
                     dst_ds=dst_ds,
                     compare_cols=compare_cols,
@@ -52,18 +53,41 @@ def sync(
 
                 dst_ds.add_increasing_col_indices(increasing_cols)
 
-                if after := dst_ds.get_max_values(increasing_cols):
-                    if [1 for val in after.values() if val is not None]:
-                        return _incremental_refresh_from_last(
-                            src_ds=src_ds,
-                            dst_ds=dst_ds,
-                            after=after,
-                            start_time=start_time,
-                            batch_size=batch_size,
-                        )
-                return _full_refresh(src_ds=src_ds, dst_ds=dst_ds, start_time=start_time, batch_size=batch_size)
+                if (
+                    (after := dst_ds.get_max_values(increasing_cols))
+                    and any(1 for val in after.values() if val is not None)
+                ):
+                    result = _incremental_refresh_from_last(
+                        src_ds=src_ds,
+                        dst_ds=dst_ds,
+                        after=after,
+                        start_time=start_time,
+                        batch_size=batch_size,
+                    )
+                else:
+                    result = _full_refresh(
+                        src_ds=src_ds,
+                        dst_ds=dst_ds,
+                        start_time=start_time,
+                        batch_size=batch_size,
+                    )
         else:
-            return _full_refresh(src_ds=src_ds, dst_ds=dst_ds, start_time=start_time, batch_size=batch_size)
+            result = _full_refresh(
+                src_ds=src_ds,
+                dst_ds=dst_ds,
+                start_time=start_time,
+                batch_size=batch_size,
+            )
+
+        if track_history and (
+            result.rows_added > 0 or
+            result.rows_deleted > 0 or
+            result.rows_updated > 0
+        ):
+            dst_ds.create_history_table()
+            dst_ds.update_history_table()
+
+        return result
     except Exception as e:
         return data.SyncResult.failed(
             error_message=f"An error occurred while running sync(): {e!s}\n{traceback.format_exc()}"
