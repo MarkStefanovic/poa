@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import datetime
 import itertools
+import traceback
 import typing
 
 import pyodbc
+from loguru import logger
 
 from src import data
 
@@ -52,16 +54,25 @@ class OdbcSrcDs(data.SrcDs):
             sorted_after = sorted((key, val) for key, val in after.items() if val is not None)
             params = [itm[1] for itm in sorted_after]
 
-        sql = "SELECT\n  "
-        sql += "\n, ".join(_wrap_col_name_w_alias(wrapper=self._wrapper, col_name=col) for col in cols)
-        sql += f"\nFROM {self._full_table_name}"
+        sql = "SELECT "
+        sql += ", ".join(_wrap_col_name_w_alias(wrapper=self._wrapper, col_name=col) for col in cols)
+        sql += f" FROM {self._full_table_name}"
         if sorted_after:
-            sql += "\nWHERE\n  " + "\n  OR ".join(f"{self._wrapper(key)} > ?" for key, val in sorted_after)
+            sql += " WHERE " + " OR ".join(f"{self._wrapper(key)} > ?" for key, val in sorted_after)
 
         if params:
+            try:
+                self._cur.execute(sql, params)
+            except Exception as e:
+                logger.error(f"An error occurred while running {sql!r}, params: {params!r}: {e!s}\n{traceback.format_exc()}")
+                raise
             self._cur.execute(sql, params)
         else:
-            self._cur.execute(sql)
+            try:
+                self._cur.execute(sql)
+            except Exception as e:
+                logger.error(f"An error occurred while running {sql!r}: {e!s}\n{traceback.format_exc()}")
+                raise
 
         return [dict(zip(cols, row)) for row in self._cur.fetchall()]
 
@@ -72,13 +83,13 @@ class OdbcSrcDs(data.SrcDs):
             else:
                 cols = sorted(c.name for c in self.get_table().columns)
 
-            sql = "SELECT\n  "
-            sql += "\n, ".join(_wrap_col_name_w_alias(wrapper=self._wrapper, col_name=col) for col in cols)
-            sql += f"\nFROM {self._full_table_name}"
+            sql = "SELECT "
+            sql += ", ".join(_wrap_col_name_w_alias(wrapper=self._wrapper, col_name=col) for col in cols)
+            sql += f" FROM {self._full_table_name}"
 
-            sql += "\nWHERE\n  "
+            sql += " WHERE "
             key_cols = sorted(next(itertools.islice(keys, 1)).keys())
-            sql += "\n  AND ".join(f"{self._wrapper(key_col)} = ?" for key_col in key_cols)
+            sql += " AND ".join(f"{self._wrapper(key_col)} = ?" for key_col in key_cols)
 
             params = (
                 tuple(row[key_col] for key_col in key_cols)

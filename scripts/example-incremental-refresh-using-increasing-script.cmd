@@ -9,6 +9,6 @@ conda run -n poa --cwd %folder% --live-stream python -m src.main ^
     --dst-db dw ^
     --dst-schema hh ^
     --dst-table activity_rt ^
-    --pk "activity_id" ^
+    --pk activity_id ^
     --increasing created_date changed_date ^
     --skip-if-row-counts-match

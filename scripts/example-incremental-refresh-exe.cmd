@@ -8,5 +8,8 @@ for %%i in ("%~dp0..") DO SET "folder=%%~fi"
     --src-table mv_scheduled_activities_rt ^
     --dst-db dw ^
     --dst-schema hh ^
-    --pk "id" ^
-    --increasing created_date changed_date ^
+    --dst-table mv_scheduled_activities_rt ^
+    --pk id ^
+    --increasing last_commit_time ^
+    --track-history
+

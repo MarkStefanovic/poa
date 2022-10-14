@@ -21,7 +21,7 @@ class HHSrcDs(OdbcSrcDs):
         table_name: str,
         pk_cols: tuple[str, ...],
     ):
-        super().__init__(cur=cur, db_name=db_name, schema_name=schema_name, table_name=table_name)
+        super().__init__(cur=cur, db_name=db_name, schema_name=schema_name, table_name=table_name, wrapper=_wrap_name)
 
         self._pk_cols = pk_cols
 
@@ -72,7 +72,7 @@ class HHSrcDs(OdbcSrcDs):
 
 
 def _wrap_name(name: str, /) -> str:
-    return f'"{name}"'
+    return f"`{name}`"
 
 
 def _wrap_col_name_w_alias(col_name: str, /) -> str:
