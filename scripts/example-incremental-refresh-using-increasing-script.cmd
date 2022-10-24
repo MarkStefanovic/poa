@@ -3,12 +3,12 @@ for %%i in ("%~dp0..") DO SET "folder=%%~fi"
 @ECHO ON
 conda run -n poa --cwd %folder% --live-stream python -m src.main ^
     incremental-sync ^
-    --src-db hh ^
-    --src-schema opc_prod ^
-    --src-table activity_rt ^
+    --src-db dt ^
+    --src-schema dbo ^
+    --src-table codetables ^
     --dst-db dw ^
-    --dst-schema hh ^
-    --dst-table activity_rt ^
-    --pk activity_id ^
-    --increasing created_date changed_date ^
-    --skip-if-row-counts-match
+    --dst-schema dt ^
+    --dst-table codetables ^
+    --pk code ^
+    --increasing datecreated lastupdated ^
+    --track-history

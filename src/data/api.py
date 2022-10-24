@@ -7,6 +7,7 @@ __all__ = ("API",)
 
 class API(str, enum.Enum):
     HH = "hh"
+    MS = "ms"
     PYODBC = "odbc"
     PSYCOPG2 = "pg"
 

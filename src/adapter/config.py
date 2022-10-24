@@ -23,6 +23,8 @@ def get_api(*, config_file: pathlib.Path, name: str) -> data.API:
     api_str = str(_load(config_file=config_file)["ds"][name]["api"])
     if api_str == "hh":
         return data.API.HH
+    elif api_str == "ms":
+        return data.API.MS
     elif api_str == "pyodbc":
         return data.API.PYODBC
     elif api_str == "psycopg2":

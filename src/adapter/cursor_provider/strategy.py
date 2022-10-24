@@ -6,7 +6,7 @@ __all__ = ("create",)
 
 
 def create(*, api: data.API, connection_str: str) -> data.CursorProvider:
-    if api in (data.API.HH, data.API.PYODBC):
+    if api in (data.API.HH, data.API.MS, data.API.PYODBC):
         return OdbcCursorProvider(connection_str=connection_str, api=api)
     elif api == data.API.PSYCOPG2:
         return PgCursorProvider(connection_str=connection_str)
