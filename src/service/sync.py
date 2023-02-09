@@ -198,24 +198,15 @@ def _sync(
 
                 dst_ds.add_increasing_col_indices(increasing_cols)
 
-                if (
-                    (after := dst_ds.get_max_values(increasing_cols))
-                    and any(1 for val in after.values() if val is not None)
-                ):
-                    result = _incremental_refresh_from_last(
-                        src_ds=src_ds,
-                        dst_ds=dst_ds,
-                        after=after,
-                        start_time=start_time,
-                        batch_size=batch_size,
-                    )
-                else:
-                    result = _full_refresh(
-                        src_ds=src_ds,
-                        dst_ds=dst_ds,
-                        start_time=start_time,
-                        batch_size=batch_size,
-                    )
+                after = dst_ds.get_max_values(increasing_cols)
+
+                result = _incremental_refresh_from_last(
+                    src_ds=src_ds,
+                    dst_ds=dst_ds,
+                    after=after,
+                    start_time=start_time,
+                    batch_size=batch_size,
+                )
         else:
             result = _full_refresh(
                 src_ds=src_ds,
@@ -273,13 +264,19 @@ def _incremental_refresh_from_last(
     start_time: datetime.datetime,
     batch_size: int,
 ) -> data.SyncResult:
-    assert after is not None, "after is required for _incremental_refresh_from_last, but got None."
-    assert [1 for val in after.values() if val is not None], "after was empty."
+    if after is None:
+        final_after: dict[str, typing.Hashable] | None = None
+    else:
+        nonzero_after = {k: v for k, v in after.items() if v is not None}
+        if nonzero_after:
+            final_after = nonzero_after
+        else:
+            final_after = None
 
     src_table = src_ds.get_table()
 
-    src_rows = src_ds.fetch_rows(col_names=None, after=after)
-    dst_rows = dst_ds.fetch_rows(col_names=None, after=after)
+    src_rows = src_ds.fetch_rows(col_names=None, after=final_after)
+    dst_rows = dst_ds.fetch_rows(col_names=None, after=final_after)
 
     row_diff = data.compare_rows(
         src_rows=src_rows,

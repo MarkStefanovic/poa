@@ -49,7 +49,7 @@ class PgSrcDs(data.SrcDs):
         full_after = shared.combine_filters(ds_filter=self._after, query_filter=after)
 
         if full_after:
-            sql += "\nWHERE\n  " + "\n  OR ".join(f"{_wrapper(key)} > %(key)s" for key in full_after.keys())
+            sql += "\nWHERE\n  " + "\n  OR ".join(f"{_wrapper(key)} > %({key})s" for key in full_after.keys())
             self._cur.execute(sql, full_after)
         else:
             self._cur.execute(sql)
@@ -93,7 +93,7 @@ class PgSrcDs(data.SrcDs):
         sql = f"SELECT count(*) AS ct FROM {full_table_name}"
 
         if self._after:
-            sql += "WHERE " + " OR ".join(f"{_wrapper(key)} > %(key)s" for key in self._after.keys())
+            sql += "WHERE " + " OR ".join(f"{_wrapper(key)} > %({key})s" for key in self._after.keys())
 
             self._cur.execute(sql, self._after)
         else:

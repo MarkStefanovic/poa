@@ -69,7 +69,9 @@ class OdbcSrcDs(data.SrcDs):
             try:
                 self._cur.execute(sql, params)
             except Exception as e:
-                logger.error(f"An error occurred while running {sql!r}, params: {params!r}: {e!s}\n{traceback.format_exc()}")
+                logger.error(
+                    f"An error occurred while running {sql!r}, params: {params!r}: {e!s}\n{traceback.format_exc()}"
+                )
                 raise
             self._cur.execute(sql, params)
         else:

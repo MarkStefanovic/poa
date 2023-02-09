@@ -208,7 +208,7 @@ class PgDstDs(data.DstDs):
             sql = f"SELECT max({_wrap_name(col)}) AS v FROM {full_table_name}"
 
             if self._after:
-                sql += "WHERE " + " OR ".join(f"{_wrap_name(key)} > %(key)s" for key in self._after.keys())
+                sql += "WHERE " + " OR ".join(f"{_wrap_name(key)} > %({key})s" for key in self._after.keys())
 
                 self._cur.execute(sql, self._after)
             else:
@@ -232,7 +232,7 @@ class PgDstDs(data.DstDs):
         sql = f"SELECT count(*) AS ct FROM {full_table_name} WHERE poa_op <> 'd'"
 
         if self._after:
-            sql += "WHERE " + " OR ".join(f"{_wrap_name(key)} > %(key)s" for key in self._after.keys())
+            sql += "WHERE " + " OR ".join(f"{_wrap_name(key)} > %({key})s" for key in self._after.keys())
 
             self._cur.execute(sql, self._after)
         else:

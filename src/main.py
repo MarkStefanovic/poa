@@ -14,8 +14,10 @@ if __name__ == '__main__':
 
     logging_folder = adapter.fs.get_log_folder()
 
-    logger.remove()
-    logger.add(sys.stderr, level="INFO")
+    if not getattr(sys, "frozen", False):
+        logger.remove()
+        logger.add(sys.stderr, level="INFO")
+
     logger.add(logging_folder / f"error.log", rotation="5 MB", retention="7 days", level="ERROR")
 
     try:
@@ -61,9 +63,9 @@ if __name__ == '__main__':
         incremental_strategy_options = incremental_sync_parser.add_mutually_exclusive_group()
         incremental_strategy_options.add_argument("--compare", nargs="+", type=str)
         incremental_strategy_options.add_argument("--increasing", nargs="+", type=str)
-        incremental_strategy_options.add_argument("--after", nargs="+", type=str)
         incremental_sync_parser.add_argument("--skip-if-row-counts-match", action="store_true")
         incremental_sync_parser.add_argument("--track-history", action="store_true")
+        incremental_sync_parser.add_argument("--after", nargs="+", type=str)
 
         inspect_parser.add_argument("--src-db", type=str, required=True)
         inspect_parser.add_argument("--src-schema", type=str, required=True)
