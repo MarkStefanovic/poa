@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 import itertools
 import textwrap
 import typing
@@ -7,6 +8,7 @@ import typing
 from psycopg2.extras import RealDictCursor
 
 from src import data
+from src.adapter.ds import shared
 
 __all__ = ("PgSrcDs",)
 
@@ -19,11 +21,13 @@ class PgSrcDs(data.SrcDs):
         db_name: str,
         schema_name: str,
         table_name: str,
+        after: dict[str, datetime.date],
     ):
-        self._cur = cur
-        self._db_name = db_name
-        self._schema_name = schema_name
-        self._table_name = table_name
+        self._cur: typing.Final[RealDictCursor] = cur
+        self._db_name: typing.Final[str] = db_name
+        self._schema_name: typing.Final[str] = schema_name
+        self._table_name: typing.Final[str] = table_name
+        self._after: typing.Final[dict[str, datetime.date]] = after
 
         if self._schema_name:
             self._full_table_name = f"{_wrapper(self._schema_name)}.{_wrapper(table_name)}"
@@ -41,9 +45,12 @@ class PgSrcDs(data.SrcDs):
         sql = "SELECT\n  "
         sql += "\n, ".join(_wrap_col_name_w_alias(col_name=col) for col in cols)
         sql += f"\nFROM {self._full_table_name}"
-        if after:
-            sql += "\nWHERE\n  " + "\n  OR ".join(f"{_wrapper(key)} > %(key)s" for key in after.keys())
-            self._cur.execute(sql, after)
+
+        full_after = shared.combine_filters(ds_filter=self._after, query_filter=after)
+
+        if full_after:
+            sql += "\nWHERE\n  " + "\n  OR ".join(f"{_wrapper(key)} > %(key)s" for key in full_after.keys())
+            self._cur.execute(sql, full_after)
         else:
             self._cur.execute(sql)
 
@@ -83,7 +90,15 @@ class PgSrcDs(data.SrcDs):
         else:
             full_table_name = _wrapper(self._table_name)
 
-        self._cur.execute(f"SELECT COUNT(*) AS ct FROM {full_table_name};")
+        sql = f"SELECT count(*) AS ct FROM {full_table_name}"
+
+        if self._after:
+            sql += "WHERE " + " OR ".join(f"{_wrapper(key)} > %(key)s" for key in self._after.keys())
+
+            self._cur.execute(sql, self._after)
+        else:
+            self._cur.execute(sql)
+
         return self._cur.fetchone()["ct"]  # noqa
 
     def get_table(self) -> data.Table:
@@ -147,7 +162,7 @@ class PgSrcDs(data.SrcDs):
         self._cur.execute(
             """
             SELECT 
-                COUNT(*) AS ct 
+                count(*) AS ct 
             FROM information_schema.tables AS t
             WHERE
                 t.table_schema = %(schema_name)s

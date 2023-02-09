@@ -9,6 +9,7 @@ import pyodbc
 from loguru import logger
 
 from src import data
+from src.adapter.ds import shared
 
 __all__ = ("OdbcSrcDs",)
 
@@ -27,13 +28,15 @@ class OdbcSrcDs(data.SrcDs):
         db_name: str,
         schema_name: str | None,
         table_name: str,
+        after: dict[str, datetime.date],
         wrapper: Wrapper = default_wrapper,
     ):
-        self._cur = cur
-        self._db_name = db_name
-        self._schema_name = schema_name
-        self._table_name = table_name
-        self._wrapper = wrapper
+        self._cur: typing.Final[pyodbc.Cursor] = cur
+        self._db_name: typing.Final[str] = db_name
+        self._schema_name: typing.Final[str | None] = schema_name
+        self._table_name: typing.Final[str] = table_name
+        self._after: typing.Final[dict[str, datetime.date]] = after
+        self._wrapper: typing.Final[Wrapper] = wrapper
 
         if self._schema_name:
             self._full_table_name = f"{wrapper(self._schema_name)}.{wrapper(table_name)}"
@@ -48,10 +51,12 @@ class OdbcSrcDs(data.SrcDs):
         else:
             cols = sorted({c.name for c in self.get_table().columns})
 
+        full_after = shared.combine_filters(ds_filter=self._after, query_filter=after)
+
         sorted_after: list[tuple[str, typing.Hashable]] = []
         params: list[typing.Hashable] | None = None
-        if after:
-            sorted_after = sorted((key, val) for key, val in after.items() if val is not None)
+        if full_after:
+            sorted_after = sorted((key, val) for key, val in full_after.items() if val is not None)
             params = [itm[1] for itm in sorted_after]
 
         sql = "SELECT "
@@ -107,7 +112,22 @@ class OdbcSrcDs(data.SrcDs):
         else:
             full_table_name = self._wrapper(self._table_name)
 
-        return self._cur.execute(f"SELECT COUNT(*) AS ct FROM {full_table_name}").fetchval()
+        sql = f"SELECT count(*) AS ct FROM {full_table_name}"
+
+        if self._after:
+            sorted_after = sorted((key, val) for key, val in self._after.items() if val is not None)
+
+            sorted_keys = [itm[0] for itm in sorted_after]
+
+            params = [itm[1] for itm in sorted_after]
+
+            sql += "WHERE " + " OR ".join(f"{self._wrapper(key)} > ?" for key in sorted_keys)
+
+            result = self._cur.execute(sql, params)
+        else:
+            result = self._cur.execute(sql)
+
+        return result.fetchval()
 
     def get_table(self) -> data.Table:
         if self._table is not None:

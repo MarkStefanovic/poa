@@ -1,12 +1,11 @@
 import datetime
-import typing
 
 from psycopg2._psycopg import connection
 from psycopg2.extras import RealDictCursor
 
 from src import data, service
-from src.adapter.dst_ds.pg import PgDstDs
-from src.adapter.src_ds.pg import PgSrcDs
+from src.adapter.ds.dst_ds import PgDstDs
+from src.adapter.ds.src_ds.pg import PgSrcDs
 
 
 def test_incremental_sync_using_increasing_method_when_dst_does_not_exist(pg_connection_fixture: connection):

@@ -13,6 +13,8 @@ from src import data
 
 __all__ = ("PgDstDs",)
 
+from src.adapter.ds import shared
+
 
 # noinspection SqlDialectInspection,SqlNoDataSourceInspection,SqlResolve
 class PgDstDs(data.DstDs):
@@ -25,12 +27,14 @@ class PgDstDs(data.DstDs):
         dst_table_name: str,
         src_table: data.Table,
         batch_ts: datetime.datetime,
+        after: dict[str, datetime.date],
     ):
-        self._cur = cur
-        self._src_table = src_table
-        self._batch_ts = batch_ts
+        self._cur: typing.Final[RealDictCursor] = cur
+        self._src_table: typing.Final[data.Table] = src_table
+        self._batch_ts: typing.Final[datetime.datetime] = batch_ts
+        self._after: typing.Final[dict[str, datetime.date]] = after
 
-        self._dst_table = dataclasses.replace(
+        self._dst_table: typing.Final[data.Table] = dataclasses.replace(
             src_table,
             db_name=dst_db_name,
             schema_name=dst_schema_name,
@@ -172,18 +176,25 @@ class PgDstDs(data.DstDs):
         sql = "SELECT\n  "
         sql += "\n, ".join(_wrap_name(col) for col in cols)
         sql += f"\nFROM {full_table_name}"
+
+        full_after = shared.combine_filters(ds_filter=self._after, query_filter=after)
+
         sorted_after: list[tuple[str, typing.Hashable]] = []
         params: dict[str, typing.Hashable] | None = None
-        if after:
-            sorted_after = sorted((key, val) for key, val in after.items() if val is not None)
+        if full_after:
+            sorted_after = sorted((key, val) for key, val in full_after.items() if val is not None)
             params = dict(sorted_after)
+
         sql += "\nWHERE\n  poa_op <> 'd'"
+
         if sorted_after:
             sql += "\n  AND (" + "\n    OR ".join(
                 f"{_wrap_name(key)} > %({key})s"
                 for key, val in sorted_after
             ) + "\n)"
+
         self._cur.execute(sql, params)
+
         return [dict(row) for row in self._cur.fetchall()]
 
     def get_max_values(self, /, cols: set[str]) -> dict[str, typing.Hashable] | None:
@@ -191,12 +202,23 @@ class PgDstDs(data.DstDs):
             schema_name=self._dst_table.schema_name,
             table_name=self._dst_table.table_name,
         )
-        max_values = {}
+
+        max_values: dict[str, typing.Hashable] = {}
         for col in sorted(cols):
-            self._cur.execute(f"SELECT MAX({_wrap_name(col)}) AS v FROM {full_table_name}")
+            sql = f"SELECT max({_wrap_name(col)}) AS v FROM {full_table_name}"
+
+            if self._after:
+                sql += "WHERE " + " OR ".join(f"{_wrap_name(key)} > %(key)s" for key in self._after.keys())
+
+                self._cur.execute(sql, self._after)
+            else:
+                self._cur.execute(sql)
+
             value = self._cur.fetchone()["v"]  # noqa
+
             if value is not None:
                 max_values[col] = value
+
         if max_values:
             return max_values
         return None
@@ -206,7 +228,16 @@ class PgDstDs(data.DstDs):
             schema_name=self._dst_table.schema_name,
             table_name=self._dst_table.table_name,
         )
-        self._cur.execute(f"SELECT COUNT(*) AS ct FROM {full_table_name} WHERE poa_op <> 'd'")
+
+        sql = f"SELECT count(*) AS ct FROM {full_table_name} WHERE poa_op <> 'd'"
+
+        if self._after:
+            sql += "WHERE " + " OR ".join(f"{_wrap_name(key)} > %(key)s" for key in self._after.keys())
+
+            self._cur.execute(sql, self._after)
+        else:
+            self._cur.execute(sql)
+
         return self._cur.fetchone()["ct"]  # noqa
 
     def table_exists(self) -> bool:
@@ -272,7 +303,7 @@ class PgDstDs(data.DstDs):
             placeholders = ", ".join(f"%({c})s" for c in col_names)
 
             hd_col_csv = ", ".join(f"%({c})s" for c in col_names if c not in self._dst_table.pk)
-            hd = f"MD5(ROW({hd_col_csv})::TEXT)"
+            hd = f"md5(row({hd_col_csv})::TEXT)"
 
             pk_csv = ", ".join(_wrap_name(c) for c in self._dst_table.pk)
 

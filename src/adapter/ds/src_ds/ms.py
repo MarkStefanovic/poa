@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import dataclasses
+import datetime
 import itertools
 
 import pyodbc
 
 from src import data
-from src.adapter.src_ds.odbc import OdbcSrcDs
+from src.adapter.ds.src_ds.odbc import OdbcSrcDs
 
 __all__ = ("MSSrcDs",)
 
@@ -20,8 +21,16 @@ class MSSrcDs(OdbcSrcDs):
         schema_name: str | None,
         table_name: str,
         pk_cols: tuple[str, ...],
+        after: dict[str, datetime.date],
     ):
-        super().__init__(cur=cur, db_name=db_name, schema_name=schema_name, table_name=table_name, wrapper=_wrap_name)
+        super().__init__(
+            cur=cur,
+            db_name=db_name,
+            schema_name=schema_name,
+            table_name=table_name,
+            wrapper=_wrap_name,
+            after=after,
+        )
 
         self._pk_cols = pk_cols
 

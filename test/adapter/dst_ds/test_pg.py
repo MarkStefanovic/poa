@@ -5,7 +5,7 @@ from psycopg2._psycopg import cursor
 from psycopg2.extras import RealDictCursor
 
 from src import data
-from src.adapter.dst_ds.pg import PgDstDs
+from src.adapter.ds.dst_ds import PgDstDs
 
 
 @pytest.fixture(scope="session")
