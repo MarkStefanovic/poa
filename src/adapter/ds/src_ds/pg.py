@@ -5,6 +5,7 @@ import itertools
 import textwrap
 import typing
 
+from psycopg import sql
 from psycopg2.extras import RealDictCursor
 
 from src import data
@@ -36,7 +37,9 @@ class PgSrcDs(data.SrcDs):
 
         self._table: data.Table | None = None
 
-    def fetch_rows(self, *, col_names: set[str] | None, after: dict[str, typing.Hashable] | None) -> list[data.Row]:
+    def fetch_rows(
+        self, *, col_names: set[str] | None, after: dict[str, typing.Hashable] | None
+    ) -> list[data.Row]:
         if col_names:
             cols = sorted(col_names)
         else:
@@ -49,14 +52,18 @@ class PgSrcDs(data.SrcDs):
         full_after = shared.combine_filters(ds_filter=self._after, query_filter=after)
 
         if full_after:
-            sql += "\nWHERE\n  " + "\n  OR ".join(f"{_wrapper(key)} > %({key})s" for key in full_after.keys())
+            sql += "\nWHERE\n  " + "\n  OR ".join(
+                f"{_wrapper(key)} > %({key})s" for key in full_after.keys()
+            )
             self._cur.execute(sql, full_after)
         else:
             self._cur.execute(sql)
 
         return [dict(row) for row in self._cur.fetchall()]
 
-    def fetch_rows_by_key(self, *, col_names: set[str] | None, keys: set[data.RowKey]) -> list[data.Row]:
+    def fetch_rows_by_key(
+        self, *, col_names: set[str] | None, keys: set[data.RowKey]
+    ) -> list[data.Row]:
         if keys:
             if col_names:
                 cols = sorted(col_names)
@@ -71,13 +78,7 @@ class PgSrcDs(data.SrcDs):
             key_cols = sorted(next(itertools.islice(keys, 1)).keys())
             sql += "\n  AND ".join(f"{_wrapper(key_col)} = %(key_col)s" for key_col in key_cols)
 
-            params = [
-                {
-                    key_col: row[key_col]
-                    for key_col in key_cols
-                }
-                for row in keys
-            ]
+            params = [{key_col: row[key_col] for key_col in key_cols} for row in keys]
 
             self._cur.executemany(sql, params)
             return [dict(row) for row in self._cur.fetchall()]
@@ -93,7 +94,9 @@ class PgSrcDs(data.SrcDs):
         sql = f"SELECT count(*) AS ct FROM {full_table_name}"
 
         if self._after:
-            sql += "WHERE " + " OR ".join(f"{_wrapper(key)} > %({key})s" for key in self._after.keys())
+            sql += "WHERE " + " OR ".join(
+                f"{_wrapper(key)} > %({key})s" for key in self._after.keys()
+            )
 
             self._cur.execute(sql, self._after)
         else:
@@ -106,7 +109,9 @@ class PgSrcDs(data.SrcDs):
             return self._table
 
         if not self.table_exists():
-            raise data.error.TableDoesntExist(table_name=self._table_name, schema_name=self._schema_name)
+            raise data.error.TableDoesntExist(
+                table_name=self._table_name, schema_name=self._schema_name
+            )
 
         sql = textwrap.dedent(
             """
@@ -140,7 +145,9 @@ class PgSrcDs(data.SrcDs):
                 )
                 cols.append(col)
         else:
-            raise data.error.TableDoesntExist(schema_name=self._schema_name, table_name=self._table_name)
+            raise data.error.TableDoesntExist(
+                schema_name=self._schema_name, table_name=self._table_name
+            )
 
         pk = _get_pk_for_table(
             cur=self._cur,
@@ -148,7 +155,9 @@ class PgSrcDs(data.SrcDs):
             table_name=self._table_name,
         )
 
-        assert pk is not None, f"No primary key was found for the table, {self._schema_name}.{self._table_name}."
+        assert (
+            pk is not None
+        ), f"No primary key was found for the table, {self._schema_name}.{self._table_name}."
 
         return data.Table(
             db_name=self._db_name,
@@ -169,13 +178,16 @@ class PgSrcDs(data.SrcDs):
                 AND t.table_name = %(table_name)s
             ;
             """,
-            {"schema_name": self._schema_name, "table_name": self._table_name}
+            {"schema_name": self._schema_name, "table_name": self._table_name},
         )
         return self._cur.fetchone()["ct"] > 0  # noqa
 
 
-def _get_pk_for_table(*, cur: RealDictCursor, schema_name: str, table_name: str) -> tuple[str, ...] | None:
-    sql = textwrap.dedent("""
+def _get_pk_for_table(
+    *, cur: RealDictCursor, schema_name: str, table_name: str
+) -> tuple[str, ...] | None:
+    sql = textwrap.dedent(
+        """
         SELECT
             c.column_name
         ,   c.data_type
@@ -192,7 +204,8 @@ def _get_pk_for_table(*, cur: RealDictCursor, schema_name: str, table_name: str)
             AND tc.table_schema = %(schema_name)s
             AND tc.table_name = %(table_name)s
         ;
-    """).strip()
+    """
+    ).strip()
     cur.execute(sql, {"schema_name": schema_name, "table_name": table_name})
     if result := cur.fetchall():
         result = typing.cast(list[dict[str, typing.Any]], result)
@@ -202,28 +215,41 @@ def _get_pk_for_table(*, cur: RealDictCursor, schema_name: str, table_name: str)
 
 def _lookup_data_type(type_name: str, /) -> data.DataType:
     if type_name in {
-        "anyarray", "ARRAY", "bytea", "inet", "interval", "jsonb", "name", "pg_dependencies",
-        "pg_lsn", "pg_mcv_list", "pg_ndistinct", "pg_node_tree", "regproc", "regtype",
-        "USER-DEFINED", "xid",
+        "anyarray",
+        "ARRAY",
+        "bytea",
+        "inet",
+        "interval",
+        "jsonb",
+        "name",
+        "pg_dependencies",
+        "pg_lsn",
+        "pg_mcv_list",
+        "pg_ndistinct",
+        "pg_node_tree",
+        "regproc",
+        "regtype",
+        "USER-DEFINED",
+        "xid",
     }:
         raise NotImplementedError(f"The data type {type_name} is not supported.")
 
     return {
         '"char"': data.DataType.Text,
-        'bigint': data.DataType.BigInt,
-        'boolean': data.DataType.Bool,
-        'character': data.DataType.Text,
-        'character varying': data.DataType.Text,
-        'date': data.DataType.Date,
-        'double precision': data.DataType.BigInt,
-        'integer': data.DataType.Int,
-        'numeric': data.DataType.Decimal,
-        'oid': data.DataType.Int,
-        'real': data.DataType.Float,
-        'smallint': data.DataType.Int,
-        'text': data.DataType.Text,
-        'timestamp with time zone': data.DataType.TimestampTZ,
-        'timestamp without time zone': data.DataType.Timestamp,
+        "bigint": data.DataType.BigInt,
+        "boolean": data.DataType.Bool,
+        "character": data.DataType.Text,
+        "character varying": data.DataType.Text,
+        "date": data.DataType.Date,
+        "double precision": data.DataType.BigInt,
+        "integer": data.DataType.Int,
+        "numeric": data.DataType.Decimal,
+        "oid": data.DataType.Int,
+        "real": data.DataType.Float,
+        "smallint": data.DataType.Int,
+        "text": data.DataType.Text,
+        "timestamp with time zone": data.DataType.TimestampTZ,
+        "timestamp without time zone": data.DataType.Timestamp,
     }[type_name]
 
 
@@ -235,3 +261,65 @@ def _wrap_col_name_w_alias(*, col_name: str) -> str:
     if col_name.lower() == col_name:
         return _wrapper(col_name)
     return f"{_wrapper(col_name)} AS {_wrapper(col_name).lower()}"
+
+
+def _compose_select_rows_query(
+    *,
+    schema_name: str | None,
+    table_name: str,
+    after: dict[str, datetime.date],
+) -> tuple[sql.Composed, tuple[datetime.date, ...] | None]:
+    if after:
+        sorted_after = sorted((key, val) for key, val in after.items() if val is not None)
+
+        sorted_keys = [itm[0] for itm in sorted_after]
+
+        criteria: sql.Composed = sql.SQL(" OR ").join(
+            [sql.SQL("{key} > ?").format(key=sql.Identifier(key)) for key in sorted_keys]
+        )
+
+        params: tuple[datetime.date, ...] | None = tuple(itm[1] for itm in sorted_after)
+
+        if schema_name:
+            # noinspection SqlDialectInspection,SqlNoDataSourceInspection
+            qry = sql.SQL("SELECT count(*) AS ct FROM {schema}.{table} WHERE {criteria};").format(
+                schema=sql.Identifier(schema_name),
+                table=sql.Identifier(table_name),
+                criteria=criteria,
+            )
+        else:
+            # noinspection SqlDialectInspection,SqlNoDataSourceInspection
+            qry = sql.SQL("SELECT count(*) AS ct FROM {table} WHERE {criteria};").format(
+                table=sql.Identifier(table_name),
+                criteria=criteria,
+            )
+
+        return qry, params
+    else:
+        if schema_name:
+            # noinspection SqlDialectInspection,SqlNoDataSourceInspection
+            qry = sql.SQL("SELECT count(*) AS ct FROM {schema}.{table};").format(
+                schema=sql.Identifier(schema_name),
+                table=sql.Identifier(table_name),
+            )
+
+            return qry, None
+        else:
+            # noinspection SqlDialectInspection,SqlNoDataSourceInspection
+            qry = sql.SQL("SELECT count(*) AS ct FROM {table};").format(
+                table=sql.Identifier(table_name),
+            )
+
+        return qry, None
+
+
+# if __name__ == "__main__":
+#     with psycopg.connect(database="")
+#     q, p = _compose_select_rows_query(
+#         schema_name="hhr",
+#         table_name="activity",
+#         after={"created_date": datetime.date(2023, 11, 1)},
+#     )
+#     q_str = q.as_string(cn)
+#     print(f"query: {q}")
+#     print(f"params: {p}")

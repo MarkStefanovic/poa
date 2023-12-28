@@ -1,15 +1,20 @@
-from __future__ import annotations
-
 import enum
 
 __all__ = ("API",)
 
 
-class API(str, enum.Enum):
+class API(enum.Enum):
     HH = "hh"
-    MS = "ms"
-    PYODBC = "odbc"
-    PSYCOPG2 = "pg"
+    MSSQL = "mssql"
+    PYODBC = "pyodbc"
+    PSYCOPG = "psycopg"
+
+    def __repr__(self) -> str:
+        return f"API.{self.name}"
 
     def __str__(self) -> str:
-        return str.__str__(self)
+        return self.value
+
+
+if __name__ == "__main__":
+    print(repr(API.PYODBC))

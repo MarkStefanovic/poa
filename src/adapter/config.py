@@ -1,61 +1,149 @@
-from __future__ import annotations
-
 import functools
 import json
 import pathlib
 import typing
 
-import loguru
-
 from src import data
 
-__all__ = (
-    "get_api",
-    "get_batch_size",
-    "get_connection_str",
-    "get_days_logs_to_keep",
-    "get_seconds_between_cleanups",
-)
-
-
-@functools.lru_cache(maxsize=100)
-def get_api(*, config_file: pathlib.Path, name: str) -> data.API:
-    api_str = str(_load(config_file=config_file)["ds"][name]["api"])
-    if api_str == "hh":
-        return data.API.HH
-    elif api_str == "ms":
-        return data.API.MS
-    elif api_str == "pyodbc":
-        return data.API.PYODBC
-    elif api_str == "psycopg2":
-        return data.API.PSYCOPG2
-    else:
-        raise data.error.UnrecognizedDatabaseAPI(api=api_str)
-
-
-def get_batch_size(*, config_file: pathlib.Path) -> int:
-    return typing.cast(int, _load(config_file=config_file)["batch-size"])
-
-
-@functools.lru_cache(maxsize=100)
-def get_connection_str(*, config_file: pathlib.Path, name: str) -> str:
-    return str(_load(config_file=config_file)["ds"][name]["connection-string"])
-
-
-def get_days_logs_to_keep(*, config_file: pathlib.Path) -> int:
-    return typing.cast(int, _load(config_file=config_file)["days-logs-to-keep"])
+__all__ = ("load",)
 
 
 @functools.lru_cache(maxsize=1)
-def get_seconds_between_cleanups(*, config_file: pathlib.Path) -> int:
-    return typing.cast(int, _load(config_file=config_file)["get-seconds-between-cleanups"])
+def load(*, config_file: pathlib.Path) -> data.Config | data.Error:
+    # noinspection PyBroadException
+    try:
+        if not config_file.exists():
+            return data.Error.new(
+                f"The config file specified, {config_file.resolve()!s}, does not exist.",
+                config_file=config_file,
+            )
+
+        with config_file.open("r") as fh:
+            d = typing.cast(dict[str, typing.Any], json.load(fh))
+
+        if "seconds-between-cleanups" not in d.keys():
+            return data.Error.new("config file is missing an entry for 'seconds-between-cleanups'.")
+
+        seconds_between_cleanups: typing.Final[int] = int(d["seconds-between-cleanups"])
+
+        if "days-logs-to-keep" not in d.keys():
+            return data.Error.new("config file is missing an entry for 'days-logs-to-keep'.")
+
+        days_logs_to_keep: typing.Final[int] = int(d["days-logs-to-keep"])
+
+        if "batch-size" not in d.keys():
+            return data.Error.new("config file is missing an entry for 'batch-size'.")
+
+        batch_size: typing.Final[int] = int(d["batch-size"])
+
+        if "databases" not in d.keys():
+            return data.Error.new("config file is missing an entry for 'databases'.")
+
+        databases: list[data.DbConfig] = []
+        for datasource_dict in d["databases"]:
+            database = _parse_datasource_dict(datasource_dict)
+            if isinstance(database, data.Error):
+                return database
+
+            databases.append(database)
+
+        return data.Config(
+            seconds_between_cleanups=seconds_between_cleanups,
+            days_logs_to_keep=days_logs_to_keep,
+            batch_size=batch_size,
+            databases=tuple(databases),
+        )
+    except:  # noqa: E722
+        # import traceback
+
+        # print(traceback.format_exc())
+
+        return data.Error.new(
+            "An error occurred while loading the config file.",
+            config_file=config_file,
+        )
 
 
-@functools.lru_cache(maxsize=1)
-def _load(*, config_file: pathlib.Path) -> dict[str, typing.Any]:
-    loguru.logger.info(f"Loading config file at {config_file.resolve()!s}...")
+def _parse_datasource_dict(datasource_dict: dict[str, typing.Any], /) -> data.DbConfig | data.Error:
+    # noinspection PyBroadException
+    try:
+        if "name" not in datasource_dict.keys():
+            return data.Error.new("datasource entry in config file is missing an entry for 'name'.")
 
-    assert config_file.exists(), f"The config file specified, {config_file.resolve()!s}, does not exist."
+        name: typing.Final[str] = datasource_dict["name"]
 
-    with config_file.open("r") as fh:
-        return json.load(fh)
+        if "api" not in datasource_dict.keys():
+            return data.Error.new("datasource entry in config file is missing an entry for 'api'.")
+
+        # noinspection PyBroadException
+        try:
+            api: typing.Final[data.API] = data.API(datasource_dict["api"])
+        except:  # noqa: E722
+            return data.Error.new(
+                f"could not convert api entry, {datasource_dict['api']!r}, to a data.API instance."
+            )
+
+        if "host" not in datasource_dict.keys():
+            return data.Error.new("datasource entry in config file is missing an entry for 'host'.")
+
+        host: typing.Final[str | None] = datasource_dict["host"]
+
+        if "db-name" not in datasource_dict.keys():
+            return data.Error.new(
+                "datasource entry in config file is missing an entry for 'db-name'."
+            )
+
+        db_name: typing.Final[str | None] = datasource_dict["db-name"]
+
+        if "keyring-db-username-entry" not in datasource_dict.keys():
+            return data.Error.new(
+                "datasource entry in config file is missing an entry for 'keyring-db-username-entry'."
+            )
+
+        keyring_db_username_entry: typing.Final[str | None] = datasource_dict[
+            "keyring-db-username-entry"
+        ]
+
+        if "keyring-db-password-entry" not in datasource_dict.keys():
+            return data.Error.new(
+                "datasource entry in config file is missing an entry for 'keyring-db-password-entry'."
+            )
+
+        keyring_db_password_entry: typing.Final[str | None] = datasource_dict[
+            "keyring-db-password-entry"
+        ]
+
+        if "connection-string" not in datasource_dict.keys():
+            return data.Error.new(
+                "datasource entry in config file is missing an entry for 'connection-string'."
+            )
+
+        connection_string: typing.Final[str | None] = datasource_dict["connection-string"]
+
+        if connection_string is None:
+            if (
+                host is None
+                or db_name is None
+                or keyring_db_username_entry is None
+                or keyring_db_password_entry is None
+            ):
+                return data.Error.new(
+                    "If connection-string is null, then host, db_name, keyring-db-username-entry, and "
+                    "keyring-db-password-entry must be provided."
+                )
+
+        return data.DbConfig(
+            ds_name=name,
+            api=api,
+            host=host,
+            db_name=db_name,
+            keyring_db_username_entry=keyring_db_username_entry,
+            keyring_db_password_entry=keyring_db_password_entry,
+            connection_string=connection_string,
+        )
+    except:  # noqa: E722
+        return data.Error.new("An error occurred while parsing datasource from json.")
+
+
+if __name__ == "__main__":
+    print(load(config_file=pathlib.Path(r"C:\bu\py\poa\assets\config.json")))

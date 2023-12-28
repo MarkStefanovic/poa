@@ -1,11 +1,11 @@
-import dataclasses
+import pydantic
 
 from src.data.data_type import DataType
 
 __all__ = ("Column",)
 
 
-@dataclasses.dataclass(frozen=True, kw_only=True)
+@pydantic.dataclasses.dataclass(frozen=True, kw_only=True, config=pydantic.ConfigDict(strict=True))
 class Column:
     name: str
     data_type: DataType

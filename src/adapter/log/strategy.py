@@ -5,9 +5,16 @@ from src.adapter.log.pg import PgLog
 __all__ = ("create",)
 
 
-def create(*, api: data.API, cursor_provider: data.CursorProvider) -> data.Log:
-    if api.PSYCOPG2:
-        assert isinstance(cursor_provider, PgCursorProvider), f"log.create expects a PgCursorProvider, but got a {type(cursor_provider)}."
-        return PgLog(cursor_provider=cursor_provider)
+def create(*, db_config: data.DbConfig) -> data.Log | data.Error:
+    try:
+        if db_config.api == data.API.PSYCOPG:
+            cursor_provider = PgCursorProvider(db_config=db_config)
 
-    raise NotImplementedError(f"The Log interface has not been implemented for the {api} api.")
+            return PgLog(cursor_provider=cursor_provider)
+
+        return data.Error.new(
+            f"The Log interface has not been implemented for the {db_config.api} api.",
+            db_config=db_config,
+        )
+    except Exception as e:
+        return data.Error.new(str(e), db_config=db_config)

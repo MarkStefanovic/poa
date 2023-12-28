@@ -9,13 +9,12 @@ __all__ = ("OdbcCursorProvider",)
 
 
 class OdbcCursorProvider(data.CursorProvider):
-    def __init__(self, *, connection_str: str, api: data.API):
-        self._connection_str = connection_str
-        self._api = api
+    def __init__(self, *, db_config: data.DbConfig):
+        self._db_config: typing.Final[data.DbConfig] = db_config
 
     @contextlib.contextmanager
     def open(self) -> typing.Generator[pyodbc.Cursor, None, None]:
-        if self._api == data.API.HH:
+        if self._db_config.api == data.API.HH:
             autocommit = True
         else:
             autocommit = False

@@ -1,15 +1,24 @@
 {
-  "get-seconds-between-cleanups":  1800,
+  "seconds-between-cleanups":  1800,
   "days-logs-to-keep": 3,
   "batch-size": 1000,
-  "ds": {
-    "pg-example": {
-      "api": "psycopg2",
-      "connection-string": "host='localhost' dbname='testdb' user='postgres' password='secret'"
+  "databases": [
+    {
+      "id": "dw",
+      "api": "psycopg",
+      "host": "pg-db-host",
+      "db-name": "pgdb",
+      "keyring-db-username-entry": "pg-db-username",
+      "keyring-db-password-entry": "pg-db-password"
     },
-    "mssql-example": {
-      "api": "pyodbc",
+    {
+      "id": "mssql-example",
+      "api": "mssql",
+      "host": "ms-db-host",
+      "db-name": "msdb",
+      "keyring-db-username-entry": null,
+      "keyring-db-password-entry": null,
       "connection-string": "Driver={SQL Server};Server=server_name;Database=database_name;Trusted_Connection=yes;"
     }
-  }
+  ]
 }

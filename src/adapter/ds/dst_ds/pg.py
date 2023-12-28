@@ -7,13 +7,12 @@ import operator
 import textwrap
 import typing
 
-from psycopg2.extras import RealDictCursor
+import psycopg
 
 from src import data
+from src.adapter.ds import shared
 
 __all__ = ("PgDstDs",)
-
-from src.adapter.ds import shared
 
 
 # noinspection SqlDialectInspection,SqlNoDataSourceInspection,SqlResolve
@@ -21,7 +20,7 @@ class PgDstDs(data.DstDs):
     def __init__(
         self,
         *,
-        cur: RealDictCursor,
+        cur: psycopg.Cursor,
         dst_db_name: str,
         dst_schema_name: str | None,
         dst_table_name: str,
@@ -29,7 +28,7 @@ class PgDstDs(data.DstDs):
         batch_ts: datetime.datetime,
         after: dict[str, datetime.date],
     ):
-        self._cur: typing.Final[RealDictCursor] = cur
+        self._cur: typing.Final[psycopg.Cursor] = cur
         self._src_table: typing.Final[data.Table] = src_table
         self._batch_ts: typing.Final[datetime.datetime] = batch_ts
         self._after: typing.Final[dict[str, datetime.date]] = after
@@ -42,7 +41,8 @@ class PgDstDs(data.DstDs):
         )
 
     def add_check_result(self, /, result: data.CheckResult) -> None:
-        sql = textwrap.dedent(f"""
+        sql = textwrap.dedent(
+            """
             CALL poa.add_check_result (
                 p_src_db_name := %(src_db_name)s
             ,   p_src_schema_name := %(src_schema_name)s
@@ -56,7 +56,8 @@ class PgDstDs(data.DstDs):
             ,   p_missing_keys := %(missing_keys)s
             ,   p_execution_millis := %(execution_millis)s
             );
-        """).strip()
+        """
+        ).strip()
         self._cur.execute(
             sql,
             {
@@ -71,7 +72,7 @@ class PgDstDs(data.DstDs):
                 "extra_keys": list(result.extra_keys or set()),
                 "missing_keys": list(result.missing_keys or set()),
                 "execution_millis": result.execution_millis,
-            }
+            },
         )
 
     def add_increasing_col_indices(self, /, increasing_cols: set[str]) -> None:
@@ -103,8 +104,12 @@ class PgDstDs(data.DstDs):
             "\n);"
         )
         self._cur.execute(sql)
-        self._cur.execute(f"CREATE INDEX ix_{self._dst_table.table_name}_poa_ts ON {full_table_name} (poa_ts DESC);")
-        self._cur.execute(f"CREATE INDEX ix_{self._dst_table.table_name}_poa_op ON {full_table_name} (poa_op);")
+        self._cur.execute(
+            f"CREATE INDEX ix_{self._dst_table.table_name}_poa_ts ON {full_table_name} (poa_ts DESC);"
+        )
+        self._cur.execute(
+            f"CREATE INDEX ix_{self._dst_table.table_name}_poa_op ON {full_table_name} (poa_op);"
+        )
 
     def create_history_table(self) -> None:
         full_table_name = _generate_full_table_name(
@@ -121,14 +126,20 @@ class PgDstDs(data.DstDs):
             "\n, poa_hd CHAR(32) NOT NULL"
             "\n, poa_op CHAR(1) NOT NULL CHECK (poa_op IN ('a', 'd', 'u'))"
             "\n, poa_ts TIMESTAMPTZ(3) NOT NULL DEFAULT now()"
-            "\n, PRIMARY KEY (" + ", ".join(_wrap_name(col) for col in self._dst_table.pk) + ", poa_ts)"
+            "\n, PRIMARY KEY ("
+            + ", ".join(_wrap_name(col) for col in self._dst_table.pk)
+            + ", poa_ts)"
             "\n);"
         )
 
         self._cur.execute(sql)
 
-        self._cur.execute(f"CREATE INDEX IF NOT EXISTS ix_{self._dst_table.table_name}_history_poa_ts ON {full_table_name} (poa_ts DESC);")
-        self._cur.execute(f"CREATE INDEX IF NOT EXISTS ix_{self._dst_table.table_name}_history_poa_op ON {full_table_name} (poa_op);")
+        self._cur.execute(
+            f"CREATE INDEX IF NOT EXISTS ix_{self._dst_table.table_name}_history_poa_ts ON {full_table_name} (poa_ts DESC);"
+        )
+        self._cur.execute(
+            f"CREATE INDEX IF NOT EXISTS ix_{self._dst_table.table_name}_history_poa_op ON {full_table_name} (poa_op);"
+        )
 
     def delete_rows(self, /, keys: set[data.RowKey]) -> None:
         if keys:
@@ -139,7 +150,8 @@ class PgDstDs(data.DstDs):
             first_key: data.RowKey = next(itertools.islice(keys, 1))
             key_cols = sorted(first_key.keys())
             where_clause = " AND ".join(f"{_wrap_name(c)} = %({c})s" for c in key_cols)
-            sql = textwrap.dedent(f"""
+            sql = textwrap.dedent(
+                f"""
                 UPDATE {full_table_name}
                 SET 
                     poa_op = 'd'
@@ -147,7 +159,8 @@ class PgDstDs(data.DstDs):
                 WHERE 
                     {where_clause}
                     AND poa_op <> 'd'
-            """).strip()
+            """
+            ).strip()
             self._cur.executemany(sql, (key | {"batch_ts": self._batch_ts} for key in keys))
 
     def drop_table(self) -> None:
@@ -188,10 +201,11 @@ class PgDstDs(data.DstDs):
         sql += "\nWHERE\n  poa_op <> 'd'"
 
         if sorted_after:
-            sql += "\n  AND (" + "\n    OR ".join(
-                f"{_wrap_name(key)} > %({key})s"
-                for key, val in sorted_after
-            ) + "\n)"
+            sql += (
+                "\n  AND ("
+                + "\n    OR ".join(f"{_wrap_name(key)} > %({key})s" for key, val in sorted_after)
+                + "\n)"
+            )
 
         self._cur.execute(sql, params)
 
@@ -208,7 +222,9 @@ class PgDstDs(data.DstDs):
             sql = f"SELECT max({_wrap_name(col)}) AS v FROM {full_table_name}"
 
             if self._after:
-                sql += "WHERE " + " OR ".join(f"{_wrap_name(key)} > %({key})s" for key in self._after.keys())
+                sql += "WHERE " + " OR ".join(
+                    f"{_wrap_name(key)} > %({key})s" for key in self._after.keys()
+                )
 
                 self._cur.execute(sql, self._after)
             else:
@@ -232,7 +248,11 @@ class PgDstDs(data.DstDs):
         sql = f"SELECT count(*) AS ct FROM {full_table_name} WHERE poa_op <> 'd'"
 
         if self._after:
-            sql += "AND (" + " OR ".join(f"{_wrap_name(key)} > %({key})s" for key in self._after.keys()) + ")"
+            sql += (
+                "AND ("
+                + " OR ".join(f"{_wrap_name(key)} > %({key})s" for key in self._after.keys())
+                + ")"
+            )
 
             self._cur.execute(sql, self._after)
         else:
@@ -263,20 +283,27 @@ class PgDstDs(data.DstDs):
         self._cur.execute(f"TRUNCATE {full_table_name}")
 
     def update_history_table(self) -> None:
-        col_names = sorted({c.name for c in self._dst_table.columns}) + ["poa_hd", "poa_op", "poa_ts"]
+        col_names = sorted({c.name for c in self._dst_table.columns}) + [
+            "poa_hd",
+            "poa_op",
+            "poa_ts",
+        ]
 
         col_name_csv = ", ".join(_wrap_name(c) for c in col_names)
 
         if self._dst_table.schema_name:
             full_dst_table_name = f"{_wrap_name(self._dst_table.schema_name)}.{_wrap_name(self._dst_table.table_name)}"
-            full_history_table_name = f"{_wrap_name(self._dst_table.schema_name)}.{self._dst_table.table_name}_history"
+            full_history_table_name = (
+                f"{_wrap_name(self._dst_table.schema_name)}.{self._dst_table.table_name}_history"
+            )
         else:
             full_dst_table_name = _wrap_name(self._dst_table.table_name)
             full_history_table_name = f"{self._dst_table.table_name}_history"
 
         pks_match = " AND ".join(f"d.{col} = h.{col}" for col in self._dst_table.pk + ("poa_ts",))
 
-        sql = textwrap.dedent(f"""
+        sql = textwrap.dedent(
+            f"""
             INSERT INTO {full_history_table_name}
                 ({col_name_csv})
             SELECT
@@ -290,7 +317,8 @@ class PgDstDs(data.DstDs):
                         {pks_match}
                 )
             ;
-        """).strip()
+        """
+        ).strip()
 
         self._cur.execute(sql)
 
@@ -307,17 +335,22 @@ class PgDstDs(data.DstDs):
 
             pk_csv = ", ".join(_wrap_name(c) for c in self._dst_table.pk)
 
-            set_values_csv = "\n, ".join(
-                f"{_wrap_name(c)} = EXCLUDED.{_wrap_name(c)}"
-                for c in col_names if c not in self._dst_table.pk
-            ) + "\n, poa_hd = EXCLUDED.poa_hd, poa_op = 'u'\n, poa_ts = %(batch_ts)s"
+            set_values_csv = (
+                "\n, ".join(
+                    f"{_wrap_name(c)} = EXCLUDED.{_wrap_name(c)}"
+                    for c in col_names
+                    if c not in self._dst_table.pk
+                )
+                + "\n, poa_hd = EXCLUDED.poa_hd, poa_op = 'u'\n, poa_ts = %(batch_ts)s"
+            )
 
             if self._dst_table.schema_name:
                 full_table_name = f"{_wrap_name(self._dst_table.schema_name)}.{_wrap_name(self._dst_table.table_name)}"
             else:
                 full_table_name = _wrap_name(self._dst_table.table_name)
 
-            sql = textwrap.dedent(f"""
+            sql = textwrap.dedent(
+                f"""
                 INSERT INTO {full_table_name}
                   ({col_name_csv}, poa_hd, poa_op)
                 VALUES
@@ -329,7 +362,8 @@ class PgDstDs(data.DstDs):
                     {full_table_name}.poa_hd <> EXCLUDED.poa_hd
                     OR {full_table_name}.poa_op = 'd'
                 RETURNING poa_op
-            """).strip()
+            """
+            ).strip()
             self._cur.executemany(sql, ({"batch_ts": self._batch_ts} | row for row in rows))
 
 

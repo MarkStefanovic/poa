@@ -1,11 +1,13 @@
 import dataclasses
 
+import pydantic
+
 from src.data.frozen_dict import FrozenDict
 
 __all__ = ("CheckResult",)
 
 
-@dataclasses.dataclass(frozen=True, kw_only=True)
+@pydantic.dataclasses.dataclass(frozen=True, kw_only=True, config=pydantic.ConfigDict(strict=True))
 class CheckResult:
     src_db_name: str
     src_schema_name: str | None
