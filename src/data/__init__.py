@@ -1,4 +1,5 @@
 from src.data.api import *
+from src.data.batch_id import *
 from src.data.cache import *
 from src.data.check_result import *
 from src.data.column import *

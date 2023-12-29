@@ -1,13 +1,11 @@
-from __future__ import annotations
-
-import dataclasses
+import pydantic
 
 from src.data.column import Column
 
 __all__ = ("Table",)
 
 
-@dataclasses.dataclass(frozen=True, kw_only=True)
+@pydantic.dataclasses.dataclass(frozen=True, kw_only=True, config=pydantic.ConfigDict(strict=True))
 class Table:
     db_name: str
     schema_name: str | None

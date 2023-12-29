@@ -1,4 +1,5 @@
 import datetime
+import typing
 
 from src import data, adapter
 
@@ -13,11 +14,12 @@ def check(
     dst_db_config: data.DbConfig,
     dst_schema_name: str | None,
     dst_table_name: str,
-    pk: list[str],
+    pk_cols: typing.Iterable[str],
     after: dict[str, datetime.date],
-    batch_ts: datetime.datetime,
 ) -> None | data.Error:
     try:
+        pk: typing.Final[tuple[str, ...]] = tuple(pk_cols)
+
         log_cursor_provider = adapter.cursor_provider.create(db_config=dst_db_config)
         if isinstance(log_cursor_provider, data.Error):
             return log_cursor_provider
@@ -80,7 +82,6 @@ def check(
                         dst_table_name=dst_table_name,
                         pk=tuple(pk),
                         after=tuple(after.items()),
-                        batch_ts=batch_ts,
                     )
 
                 src_table = cached_src_table
@@ -98,7 +99,6 @@ def check(
                 dst_schema_name=dst_schema_name,
                 dst_table_name=dst_table_name,
                 src_table=src_table,
-                batch_ts=batch_ts,
                 after=after,
             )
             if isinstance(dst_ds, data.Error):

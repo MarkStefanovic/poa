@@ -3,6 +3,8 @@ import json
 import pathlib
 import typing
 
+import pydantic
+
 from src import data
 
 __all__ = ("load",)
@@ -67,10 +69,10 @@ def load(*, config_file: pathlib.Path) -> data.Config | data.Error:
 def _parse_datasource_dict(datasource_dict: dict[str, typing.Any], /) -> data.DbConfig | data.Error:
     # noinspection PyBroadException
     try:
-        if "name" not in datasource_dict.keys():
-            return data.Error.new("datasource entry in config file is missing an entry for 'name'.")
+        if "id" not in datasource_dict.keys():
+            return data.Error.new("datasource entry in config file is missing an entry for 'id'.")
 
-        name: typing.Final[str] = datasource_dict["name"]
+        db_id: typing.Final[str] = datasource_dict["id"]
 
         if "api" not in datasource_dict.keys():
             return data.Error.new("datasource entry in config file is missing an entry for 'api'.")
@@ -132,14 +134,18 @@ def _parse_datasource_dict(datasource_dict: dict[str, typing.Any], /) -> data.Db
                     "keyring-db-password-entry must be provided."
                 )
 
+            con_str: pydantic.SecretStr | None = None
+        else:
+            con_str = pydantic.SecretStr(connection_string)
+
         return data.DbConfig(
-            ds_name=name,
+            db_id=db_id,
             api=api,
             host=host,
             db_name=db_name,
             keyring_db_username_entry=keyring_db_username_entry,
             keyring_db_password_entry=keyring_db_password_entry,
-            connection_string=connection_string,
+            connection_string=con_str,
         )
     except:  # noqa: E722
         return data.Error.new("An error occurred while parsing datasource from json.")

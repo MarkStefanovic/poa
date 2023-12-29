@@ -1,8 +1,6 @@
-import dataclasses
+import typing
 
 import pydantic
-
-from src.data.frozen_dict import FrozenDict
 
 __all__ = ("CheckResult",)
 
@@ -17,6 +15,6 @@ class CheckResult:
     dst_table_name: str
     src_rows: int | None
     dst_rows: int | None
-    missing_keys: frozenset[FrozenDict] | None
-    extra_keys: frozenset[FrozenDict] | None
+    missing_keys: frozenset[dict[str, typing.Hashable]] | None
+    extra_keys: frozenset[dict[str, typing.Hashable]] | None
     execution_millis: int

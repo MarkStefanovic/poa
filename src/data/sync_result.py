@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-import dataclasses
 import typing
+
+import pydantic
 
 __all__ = ("SyncResult",)
 
 
-@dataclasses.dataclass(frozen=True, kw_only=True)
+@pydantic.dataclasses.dataclass(frozen=True, kw_only=True, config=pydantic.ConfigDict(strict=True))
 class SyncResult:
     error_message: str | None
     execution_millis: int | None

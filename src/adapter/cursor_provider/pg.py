@@ -4,18 +4,20 @@ import typing
 
 import keyring
 import psycopg
+from psycopg.rows import dict_row
 
 from src import data
+from src.adapter.cursor.pg import PgCursor
 
 __all__ = ("PgCursorProvider",)
 
 
-class PgCursorProvider(data.CursorProvider[psycopg.Cursor]):
+class PgCursorProvider(data.CursorProvider):
     def __init__(self, *, db_config: data.DbConfig):
         self._db_config: typing.Final[data.DbConfig] = db_config
 
     @contextlib.contextmanager
-    def open(self) -> typing.Generator[psycopg.Cursor | data.Error, None, None]:
+    def open(self) -> typing.Generator[data.Cursor | data.Error, None, None]:
         # noinspection PyBroadException
         try:
             username = keyring.get_password("system", self._db_config.keyring_db_username_entry)
@@ -32,11 +34,11 @@ class PgCursorProvider(data.CursorProvider[psycopg.Cursor]):
         else:
             # noinspection PyBroadException
             try:
-                with con.cursor() as cur:
+                with con.cursor(row_factory=dict_row) as cur:
                     cur.execute("SET SESSION idle_in_transaction_session_timeout = '15min';")
                     cur.execute("SET SESSION lock_timeout = '5min';")
                     cur.execute("SET SESSION TIME ZONE 'UTC';")
-                    yield cur
+                    yield PgCursor(cursor=cur)
             except BaseException:
                 con.rollback()
             else:
@@ -62,4 +64,8 @@ if __name__ == "__main__":
         if isinstance(cr, data.Error):
             raise Exception(str(cr))
 
-        print(cr.execute("SELECT 1").fetchone())
+        res = cr.fetch_all(
+            sql="SELECT 1 AS x",
+            params=None,
+        )
+        print(f"{res=!r}")

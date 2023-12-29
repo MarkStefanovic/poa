@@ -1,16 +1,12 @@
 import abc
-import typing
 
-import pydantic
-
-from src.data.cursor import Cursor
 from src.data.error import Error
 from src.data.table import Table
 
 __all__ = ("Cache",)
 
 
-class Cache(abc.ABC, typing.Generic[Cursor]):
+class Cache(abc.ABC):
     @abc.abstractmethod
     def add_table(self, /, table: Table) -> None | Error:
         raise NotImplementedError
@@ -19,8 +15,8 @@ class Cache(abc.ABC, typing.Generic[Cursor]):
     def get_table_def(
         self,
         *,
-        db_name: str,
-        schema_name: str,
+        db_name: str | None,
+        schema_name: str | None,
         table_name: str,
     ) -> Table | None | Error:
         raise NotImplementedError

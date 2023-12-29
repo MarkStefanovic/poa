@@ -7,7 +7,7 @@ from src.data.cursor import Cursor
 __all__ = ("CursorProvider",)
 
 
-class CursorProvider(abc.ABC, typing.Generic[Cursor]):
+class CursorProvider(abc.ABC):
     @contextlib.contextmanager
     @abc.abstractmethod
     def open(self) -> typing.Generator[Cursor, None, None]:

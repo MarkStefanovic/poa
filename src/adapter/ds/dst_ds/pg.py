@@ -4,10 +4,7 @@ import dataclasses
 import datetime
 import itertools
 import operator
-import textwrap
 import typing
-
-import psycopg
 
 from src import data
 from src.adapter.ds import shared
@@ -20,17 +17,15 @@ class PgDstDs(data.DstDs):
     def __init__(
         self,
         *,
-        cur: psycopg.Cursor,
+        cur: data.Cursor,
         dst_db_name: str,
         dst_schema_name: str | None,
         dst_table_name: str,
         src_table: data.Table,
-        batch_ts: datetime.datetime,
         after: dict[str, datetime.date],
     ):
-        self._cur: typing.Final[psycopg.Cursor] = cur
+        self._cur: typing.Final[data.Cursor] = cur
         self._src_table: typing.Final[data.Table] = src_table
-        self._batch_ts: typing.Final[datetime.datetime] = batch_ts
         self._after: typing.Final[dict[str, datetime.date]] = after
 
         self._dst_table: typing.Final[data.Table] = dataclasses.replace(
@@ -40,331 +35,481 @@ class PgDstDs(data.DstDs):
             table_name=dst_table_name,
         )
 
-    def add_check_result(self, /, result: data.CheckResult) -> None:
-        sql = textwrap.dedent(
-            """
-            CALL poa.add_check_result (
-                p_src_db_name := %(src_db_name)s
-            ,   p_src_schema_name := %(src_schema_name)s
-            ,   p_src_table_name := %(src_table_name)s
-            ,   p_dst_db_name := %(dst_db_name)s
-            ,   p_dst_schema_name := %(dst_schema_name)s
-            ,   p_dst_table_name := %(dst_table_name)s
-            ,   p_src_rows := %(src_rows)s 
-            ,   p_dst_rows := %(dst_rows)s
-            ,   p_extra_keys := %(extra_keys)s 
-            ,   p_missing_keys := %(missing_keys)s
-            ,   p_execution_millis := %(execution_millis)s
-            );
-        """
-        ).strip()
-        self._cur.execute(
-            sql,
-            {
-                "src_db_name": result.src_db_name,
-                "src_schema_name": result.src_schema_name,
-                "src_table_name": result.src_table_name,
-                "dst_db_name": result.dst_db_name,
-                "dst_schema_name": result.dst_schema_name,
-                "dst_table_name": result.dst_table_name,
-                "src_rows": result.src_rows,
-                "dst_rows": result.dst_rows,
-                "extra_keys": list(result.extra_keys or set()),
-                "missing_keys": list(result.missing_keys or set()),
-                "execution_millis": result.execution_millis,
-            },
-        )
-
-    def add_increasing_col_indices(self, /, increasing_cols: set[str]) -> None:
-        full_table_name = _generate_full_table_name(
+        self._full_table_name: typing.Final[str] = _generate_full_table_name(
             schema_name=self._dst_table.schema_name,
             table_name=self._dst_table.table_name,
         )
-        for col in increasing_cols:
-            self._cur.execute(
-                f"CREATE INDEX IF NOT EXISTS ix_{self._dst_table.table_name}_{col} "
-                f"ON {full_table_name} ({_wrap_name(col)} DESC);"
-            )
-
-    def create(self) -> None:
-        full_table_name = _generate_full_table_name(
-            schema_name=self._dst_table.schema_name,
-            table_name=self._dst_table.table_name,
-        )
-        sql = f"CREATE TABLE {full_table_name} (\n  "
-        sql += "\n, ".join(
-            _generate_column_definition(col=col)
-            for col in sorted(self._dst_table.columns, key=operator.attrgetter("name"))
-        )
-        sql += (
-            "\n, poa_hd CHAR(32) NOT NULL"
-            "\n, poa_op CHAR(1) NOT NULL CHECK (poa_op IN ('a', 'd', 'u'))"
-            "\n, poa_ts TIMESTAMPTZ(3) NOT NULL DEFAULT now()"
-            "\n, PRIMARY KEY (" + ", ".join(_wrap_name(col) for col in self._dst_table.pk) + ")"
-            "\n);"
-        )
-        self._cur.execute(sql)
-        self._cur.execute(
-            f"CREATE INDEX ix_{self._dst_table.table_name}_poa_ts ON {full_table_name} (poa_ts DESC);"
-        )
-        self._cur.execute(
-            f"CREATE INDEX ix_{self._dst_table.table_name}_poa_op ON {full_table_name} (poa_op);"
-        )
-
-    def create_history_table(self) -> None:
-        full_table_name = _generate_full_table_name(
+        self._history_table_name: typing.Final[str] = _generate_full_table_name(
             schema_name=self._dst_table.schema_name,
             table_name=self._dst_table.table_name + "_history",
         )
-
-        sql = f"CREATE TABLE IF NOT EXISTS {full_table_name} (\n  "
-        sql += "\n, ".join(
-            _generate_column_definition(col=col)
-            for col in sorted(self._dst_table.columns, key=operator.attrgetter("name"))
-        )
-        sql += (
-            "\n, poa_hd CHAR(32) NOT NULL"
-            "\n, poa_op CHAR(1) NOT NULL CHECK (poa_op IN ('a', 'd', 'u'))"
-            "\n, poa_ts TIMESTAMPTZ(3) NOT NULL DEFAULT now()"
-            "\n, PRIMARY KEY ("
-            + ", ".join(_wrap_name(col) for col in self._dst_table.pk)
-            + ", poa_ts)"
-            "\n);"
-        )
-
-        self._cur.execute(sql)
-
-        self._cur.execute(
-            f"CREATE INDEX IF NOT EXISTS ix_{self._dst_table.table_name}_history_poa_ts ON {full_table_name} (poa_ts DESC);"
-        )
-        self._cur.execute(
-            f"CREATE INDEX IF NOT EXISTS ix_{self._dst_table.table_name}_history_poa_op ON {full_table_name} (poa_op);"
-        )
-
-    def delete_rows(self, /, keys: set[data.RowKey]) -> None:
-        if keys:
-            full_table_name = _generate_full_table_name(
-                schema_name=self._dst_table.schema_name,
-                table_name=self._dst_table.table_name,
-            )
-            first_key: data.RowKey = next(itertools.islice(keys, 1))
-            key_cols = sorted(first_key.keys())
-            where_clause = " AND ".join(f"{_wrap_name(c)} = %({c})s" for c in key_cols)
-            sql = textwrap.dedent(
-                f"""
-                UPDATE {full_table_name}
-                SET 
-                    poa_op = 'd'
-                ,   poa_ts = %(batch_ts)s
-                WHERE 
-                    {where_clause}
-                    AND poa_op <> 'd'
-            """
-            ).strip()
-            self._cur.executemany(sql, (key | {"batch_ts": self._batch_ts} for key in keys))
-
-    def drop_table(self) -> None:
-        full_table_name = _generate_full_table_name(
+        self._staging_table_name: typing.Final[str] = _generate_full_table_name(
             schema_name=self._dst_table.schema_name,
-            table_name=self._dst_table.table_name,
+            table_name=self._dst_table.table_name + "_staging",
         )
-        self._cur.execute(f"DROP TABLE IF EXISTS {full_table_name}")
+
+    def add_check_result(self, /, result: data.CheckResult) -> None | data.Error:
+        try:
+            sql = """
+                CALL poa.add_check_result (
+                    p_src_db_name := %s
+                ,   p_src_schema_name := %s
+                ,   p_src_table_name := %s
+                ,   p_dst_db_name := %s
+                ,   p_dst_schema_name := %s
+                ,   p_dst_table_name := %s
+                ,   p_src_rows := %s 
+                ,   p_dst_rows := %s
+                ,   p_extra_keys := %s 
+                ,   p_missing_keys := %s
+                ,   p_execution_millis := %s
+                )
+            """
+
+            return self._cur.execute(
+                sql=sql,
+                params=(
+                    result.src_db_name,
+                    result.src_schema_name,
+                    result.src_table_name,
+                    result.dst_db_name,
+                    result.dst_schema_name,
+                    result.dst_table_name,
+                    result.src_rows,
+                    result.dst_rows,
+                    tuple(result.extra_keys or ()),
+                    tuple(result.missing_keys or ()),
+                    result.execution_millis,
+                ),
+            )
+        except Exception as e:
+            return data.Error.new(
+                str(e),
+                table_name=self._full_table_name,
+                result=result,
+            )
+
+    def add_rows_to_staging(self, /, rows: typing.Iterable[data.Row]) -> None | data.Error:
+        try:
+            truncate_result = self._cur.execute(
+                sql=f"TRUNCATE {self._staging_table_name}",
+                params=None,
+            )
+            if isinstance(truncate_result, data.Error):
+                return truncate_result
+
+            col_names = sorted({c.name for c in self._dst_table.columns})
+            col_name_csv = ", ".join(_wrap_name(c) for c in col_names)
+            col_placeholders = ", ".join("%s" for _ in col_names)
+
+            hd_cols = [c for c in col_names if c not in self._dst_table.pk]
+            hd_col_csv = ", ".join("%s" for _ in hd_cols)
+            hd_placeholder = f"md5(row({hd_col_csv})::TEXT)"
+
+            params: list[list[typing.Hashable]] = []
+            for row in rows:
+                row_params = [row[col] for col in col_names]
+                row_params += [row[col] for col in hd_cols]
+                params.append(row_params)
+
+            sql = f"""
+                INSERT INTO {self._staging_table_name} ({col_name_csv}, poa_op, poa_hd)
+                VALUES ({col_placeholders}, 'a', '{hd_placeholder}')
+                ON CONFLICT DO NOTHING
+            """
+
+            return self._cur.execute_many(sql=sql, params=params)
+        except Exception as e:
+            return data.Error.new(str(e), table_name=self._full_table_name)
+
+    def add_increasing_col_indices(
+        self, /, increasing_cols: typing.Iterable[str]
+    ) -> None | data.Error:
+        try:
+            for col in increasing_cols:
+                add_index_result = self._cur.execute(
+                    sql=(
+                        f"CREATE INDEX IF NOT EXISTS ix_{self._dst_table.table_name}_{col} "
+                        f"ON {self._full_table_name} ({_wrap_name(col)} DESC)"
+                    ),
+                    params=None,
+                )
+                if isinstance(add_index_result, data.Error):
+                    return add_index_result
+
+            return None
+        except Exception as e:
+            return data.Error.new(
+                str(e),
+                table_name=self._full_table_name,
+                increasing_cols=tuple(increasing_cols),
+            )
+
+    def create(self) -> None | data.Error:
+        try:
+            sql = f"CREATE TABLE {self._full_table_name} (\n  "
+            sql += "\n, ".join(
+                _generate_column_definition(col=col)
+                for col in sorted(self._dst_table.columns, key=operator.attrgetter("name"))
+            )
+            sql += (
+                "\n, poa_hd CHAR(32) NOT NULL"
+                "\n, poa_op CHAR(1) NOT NULL CHECK (poa_op IN ('a', 'd', 'u'))"
+                "\n, poa_ts TIMESTAMPTZ(3) NOT NULL DEFAULT now()"
+                "\n, PRIMARY KEY (" + ", ".join(_wrap_name(col) for col in self._dst_table.pk) + ")"
+                "\n)"
+            )
+            create_table_result = self._cur.execute(sql=sql, params=None)
+            if isinstance(create_table_result, data.Error):
+                return create_table_result
+
+            poa_ts_index_result = self._cur.execute(
+                sql=f"CREATE INDEX ix_{self._dst_table.table_name}_poa_ts ON {self._full_table_name} (poa_ts DESC)",
+                params=None,
+            )
+            if isinstance(poa_ts_index_result, data.Error):
+                return poa_ts_index_result
+
+            poa_op_index_result = self._cur.execute(
+                sql=f"CREATE INDEX ix_{self._dst_table.table_name}_poa_op ON {self._full_table_name} (poa_op)",
+                params=None,
+            )
+            if isinstance(poa_op_index_result, data.Error):
+                return poa_ts_index_result
+
+            return None
+        except Exception as e:
+            return data.Error.new(str(e), table_name=self._full_table_name)
+
+    def create_history_table(self) -> None | data.Error:
+        try:
+            history_table_name = _generate_full_table_name(
+                schema_name=self._dst_table.schema_name,
+                table_name=self._dst_table.table_name + "_history",
+            )
+
+            sql = f"CREATE TABLE IF NOT EXISTS {history_table_name} (\n  "
+            sql += "\n, ".join(
+                _generate_column_definition(col=col)
+                for col in sorted(self._dst_table.columns, key=operator.attrgetter("name"))
+            )
+            sql += (
+                "\n, poa_hd CHAR(32) NOT NULL"
+                "\n, poa_op CHAR(1) NOT NULL CHECK (poa_op IN ('a', 'd', 'u'))"
+                "\n, poa_ts TIMESTAMPTZ(3) NOT NULL DEFAULT now()"
+                "\n, PRIMARY KEY ("
+                + ", ".join(_wrap_name(col) for col in self._dst_table.pk)
+                + ", poa_ts)"
+                "\n)"
+            )
+
+            create_table_result = self._cur.execute(sql=sql, params=None)
+            if isinstance(create_table_result, data.Error):
+                return create_table_result
+
+            poa_ts_index_result = self._cur.execute(
+                sql=(
+                    f"CREATE INDEX IF NOT EXISTS ix_{self._dst_table.table_name}_history_poa_ts "
+                    f"ON {history_table_name} (poa_ts DESC)"
+                ),
+                params=None,
+            )
+            if isinstance(poa_ts_index_result, data.Error):
+                return poa_ts_index_result
+
+            poa_op_result = self._cur.execute(
+                sql=(
+                    f"CREATE INDEX IF NOT EXISTS ix_{self._dst_table.table_name}_history_poa_op "
+                    f"ON {history_table_name} (poa_op)"
+                ),
+                params=None,
+            )
+            if isinstance(poa_op_result, data.Error):
+                return poa_op_result
+
+            return None
+        except Exception as e:
+            return data.Error.new(str(e), table_name=self._full_table_name)
+
+    def create_staging_table(self) -> None | data.Error:
+        try:
+            staging_table_name = _generate_full_table_name(
+                schema_name=self._dst_table.schema_name,
+                table_name=self._dst_table.table_name + "_staging",
+            )
+
+            sql = f"CREATE TABLE IF NOT EXISTS {staging_table_name} (\n  "
+            sql += "\n, ".join(
+                _generate_column_definition(col=col)
+                for col in sorted(self._dst_table.columns, key=operator.attrgetter("name"))
+            )
+            sql += (
+                "\n, poa_hd CHAR(32) NOT NULL"
+                "\n, poa_op CHAR(1) NOT NULL CHECK (poa_op IN ('a', 'd', 'u'))"
+                "\n, poa_ts TIMESTAMPTZ(3) NOT NULL DEFAULT now()"
+                "\n, PRIMARY KEY ("
+                + ", ".join(_wrap_name(col) for col in self._dst_table.pk)
+                + ", poa_ts)"
+                "\n)"
+            )
+
+            create_table_result = self._cur.execute(sql=sql, params=None)
+            if isinstance(create_table_result, data.Error):
+                return create_table_result
+
+            poa_ts_index_result = self._cur.execute(
+                sql=(
+                    f"CREATE INDEX IF NOT EXISTS ix_{self._dst_table.table_name}_staging_poa_ts "
+                    f"ON {staging_table_name} (poa_ts DESC)"
+                ),
+                params=None,
+            )
+            if isinstance(poa_ts_index_result, data.Error):
+                return poa_ts_index_result
+
+            poa_op_result = self._cur.execute(
+                sql=(
+                    f"CREATE INDEX IF NOT EXISTS ix_{self._dst_table.table_name}_staging_poa_op "
+                    f"ON {staging_table_name} (poa_op)"
+                ),
+                params=None,
+            )
+            if isinstance(poa_op_result, data.Error):
+                return poa_op_result
+
+            return None
+        except Exception as e:
+            return data.Error.new(str(e), table_name=self._full_table_name)
+
+    def delete_rows(self, /, keys: typing.Iterable[data.RowKey]) -> None | data.Error:
+        try:
+            if keys:
+                first_key: data.RowKey = next(itertools.islice(keys, 1))
+
+                key_cols = sorted(first_key.keys())
+                where_clause = " AND ".join(f"{_wrap_name(c)} = %s" for c in key_cols)
+                sql = f"""
+                    UPDATE {self._full_table_name}
+                    SET 
+                        poa_op = 'd'
+                    ,   poa_ts = now()
+                    WHERE 
+                        {where_clause}
+                        AND poa_op <> 'd'
+                """
+
+                return self._cur.execute_many(
+                    sql=sql,
+                    params=[list(key.values()) for key in keys],
+                )
+        except Exception as e:
+            return data.Error.new(
+                str(e),
+                table_name=self._full_table_name,
+                key=tuple(keys),
+            )
+
+    def drop_table(self) -> None | data.Error:
+        return self._cur.execute(
+            sql=f"DROP TABLE IF EXISTS {self._full_table_name}",
+            params=None,
+        )
 
     def fetch_rows(
         self,
         *,
         col_names: set[str] | None,
         after: dict[str, typing.Hashable] | None,
-    ) -> list[data.Row]:
-        if col_names:
-            cols = sorted(set(col_names))
-        else:
-            cols = sorted({c.name for c in self._dst_table.columns})
+    ) -> tuple[data.Row, ...] | data.Error:
+        try:
+            if col_names:
+                cols = sorted(set(col_names))
+            else:
+                cols = sorted({c.name for c in self._dst_table.columns})
 
-        full_table_name = _generate_full_table_name(
-            schema_name=self._dst_table.schema_name,
-            table_name=self._dst_table.table_name,
-        )
-
-        sql = "SELECT\n  "
-        sql += "\n, ".join(_wrap_name(col) for col in cols)
-        sql += f"\nFROM {full_table_name}"
-
-        full_after = shared.combine_filters(ds_filter=self._after, query_filter=after)
-
-        sorted_after: list[tuple[str, typing.Hashable]] = []
-        params: dict[str, typing.Hashable] | None = None
-        if full_after:
-            sorted_after = sorted((key, val) for key, val in full_after.items() if val is not None)
-            params = dict(sorted_after)
-
-        sql += "\nWHERE\n  poa_op <> 'd'"
-
-        if sorted_after:
-            sql += (
-                "\n  AND ("
-                + "\n    OR ".join(f"{_wrap_name(key)} > %({key})s" for key, val in sorted_after)
-                + "\n)"
+            full_table_name = _generate_full_table_name(
+                schema_name=self._dst_table.schema_name,
+                table_name=self._dst_table.table_name,
             )
 
-        self._cur.execute(sql, params)
+            sql = "SELECT "
+            sql += ", ".join(_wrap_name(col) for col in cols)
+            sql += f"FROM {full_table_name}"
 
-        return [dict(row) for row in self._cur.fetchall()]
+            full_after = shared.combine_filters(ds_filter=self._after, query_filter=after)
 
-    def get_max_values(self, /, cols: set[str]) -> dict[str, typing.Hashable] | None:
-        full_table_name = _generate_full_table_name(
-            schema_name=self._dst_table.schema_name,
-            table_name=self._dst_table.table_name,
-        )
+            sql += "WHERE poa_op <> 'd'"
 
-        max_values: dict[str, typing.Hashable] = {}
-        for col in sorted(cols):
-            sql = f"SELECT max({_wrap_name(col)}) AS v FROM {full_table_name}"
+            if full_after:
+                sql += (
+                    " AND ("
+                    + " OR ".join(f"{_wrap_name(key)} > %s" for key, val in full_after.items())
+                    + ")"
+                )
+
+            return self._cur.execute(
+                sql=sql,
+                params=full_after.values(),
+            )
+        except Exception as e:
+            return data.Error.new(
+                str(e),
+                table_name=self._full_table_name,
+                col_names=tuple(col_names),
+                after=tuple((after or {}).items()),
+            )
+
+    def get_max_values(
+        self, /, col_names: typing.Iterable[str]
+    ) -> dict[str, typing.Hashable] | None | data.Error:
+        try:
+            max_values: dict[str, typing.Hashable] = {}
+            for col in sorted(col_names):
+                sql = f"SELECT max({_wrap_name(col)}) AS v FROM {self._full_table_name}"
+
+                row = self._cur.fetch_one(sql=sql, params=None)
+                if isinstance(row, data.Error):
+                    return row
+
+                if row is not None:
+                    max_values[col] = row["v"]
+
+            if max_values:
+                return max_values
+
+            return None
+        except Exception as e:
+            return data.Error.new(
+                str(e),
+                table_name=self._full_table_name,
+                col_names=tuple(col_names),
+            )
+
+    def get_row_count(self) -> int | data.Error:
+        try:
+            sql = f"SELECT count(*) AS ct FROM {self._full_table_name} WHERE poa_op <> 'd'"
 
             if self._after:
-                sql += "WHERE " + " OR ".join(
-                    f"{_wrap_name(key)} > %({key})s" for key in self._after.keys()
+                sql += (
+                    "AND ("
+                    + " OR ".join(f"{_wrap_name(key)} > %s" for key in self._after.keys())
+                    + ")"
                 )
-
-                self._cur.execute(sql, self._after)
+                row = self._cur.fetch_one(sql=sql, params=self._after.values())
             else:
-                self._cur.execute(sql)
+                row = self._cur.fetch_one(sql=sql, params=None)
 
-            value = self._cur.fetchone()["v"]  # noqa
+            if isinstance(row, data.Error):
+                return row
 
-            if value is not None:
-                max_values[col] = value
+            return typing.cast(int, row["ct"])
+        except Exception as e:
+            return data.Error.new(str(e), table_name=self._full_table_name)
 
-        if max_values:
-            return max_values
-        return None
-
-    def get_row_count(self) -> int:
-        full_table_name = _generate_full_table_name(
-            schema_name=self._dst_table.schema_name,
-            table_name=self._dst_table.table_name,
-        )
-
-        sql = f"SELECT count(*) AS ct FROM {full_table_name} WHERE poa_op <> 'd'"
-
-        if self._after:
-            sql += (
-                "AND ("
-                + " OR ".join(f"{_wrap_name(key)} > %({key})s" for key in self._after.keys())
-                + ")"
+    def table_exists(self) -> bool | data.Error:
+        try:
+            row = self._cur.fetch_one(
+                sql="""
+                    SELECT EXISTS (
+                        SELECT 1
+                        FROM information_schema.tables AS t
+                        WHERE
+                            t.table_schema = %s
+                            AND t.table_name = %s
+                    ) AS tbl_exists
+                """,
+                params=(self._dst_table.schema_name, self._dst_table.table_name),
             )
+            if isinstance(row, data.Error):
+                return row
 
-            self._cur.execute(sql, self._after)
-        else:
-            self._cur.execute(sql)
-
-        return self._cur.fetchone()["ct"]  # noqa
-
-    def table_exists(self) -> bool:
-        self._cur.execute(
-            """
-                SELECT EXISTS (
-                    SELECT 1
-                    FROM information_schema.tables AS t
-                    WHERE
-                        t.table_schema = %(schema_name)s
-                        AND t.table_name = %(table_name)s
-                ) AS tbl_exists
-            """,
-            {"schema_name": self._dst_table.schema_name, "table_name": self._dst_table.table_name},
-        )
-        return self._cur.fetchone()["tbl_exists"]  # noqa
-
-    def truncate(self) -> None:
-        full_table_name = _generate_full_table_name(
-            schema_name=self._dst_table.schema_name,
-            table_name=self._dst_table.table_name,
-        )
-        self._cur.execute(f"TRUNCATE {full_table_name}")
-
-    def update_history_table(self) -> None:
-        col_names = sorted({c.name for c in self._dst_table.columns}) + [
-            "poa_hd",
-            "poa_op",
-            "poa_ts",
-        ]
-
-        col_name_csv = ", ".join(_wrap_name(c) for c in col_names)
-
-        if self._dst_table.schema_name:
-            full_dst_table_name = f"{_wrap_name(self._dst_table.schema_name)}.{_wrap_name(self._dst_table.table_name)}"
-            full_history_table_name = (
-                f"{_wrap_name(self._dst_table.schema_name)}.{self._dst_table.table_name}_history"
-            )
-        else:
-            full_dst_table_name = _wrap_name(self._dst_table.table_name)
-            full_history_table_name = f"{self._dst_table.table_name}_history"
-
-        pks_match = " AND ".join(f"d.{col} = h.{col}" for col in self._dst_table.pk + ("poa_ts",))
-
-        sql = textwrap.dedent(
-            f"""
-            INSERT INTO {full_history_table_name}
-                ({col_name_csv})
-            SELECT
-                {col_name_csv}
-            FROM {full_dst_table_name} AS d
-            WHERE
-                NOT EXISTS (
-                    SELECT 1 
-                    FROM {full_history_table_name} AS h
-                    WHERE
-                        {pks_match}
+            if row is None:
+                return data.Error.new(
+                    "Somehow the table_exists() query returned None.",
+                    table_name=self._full_table_name,
                 )
-            ;
-        """
-        ).strip()
 
-        self._cur.execute(sql)
+            return typing.cast(bool, row["tbl_exists"])
+        except Exception as e:
+            return data.Error.new(str(e), table_name=self._full_table_name)
 
-    def upsert_rows(self, /, rows: typing.Iterable[data.Row]) -> None:
-        if rows:
-            col_names = sorted({c.name for c in self._dst_table.columns})
+    def truncate(self) -> None | data.Error:
+        return self._cur.execute(sql=f"TRUNCATE {self._full_table_name}", params=None)
+
+    def update_history_table(self) -> None | data.Error:
+        try:
+            col_names = sorted({c.name for c in self._dst_table.columns}) + [
+                "poa_hd",
+                "poa_op",
+                "poa_ts",
+            ]
 
             col_name_csv = ", ".join(_wrap_name(c) for c in col_names)
 
-            placeholders = ", ".join(f"%({c})s" for c in col_names)
+            pks_match = " AND ".join(
+                f"d.{col} = h.{col}" for col in self._dst_table.pk + ("poa_ts",)
+            )
 
-            hd_col_csv = ", ".join(f"%({c})s" for c in col_names if c not in self._dst_table.pk)
-            hd = f"md5(row({hd_col_csv})::TEXT)"
+            sql = f"""
+                INSERT INTO {self._history_table_name} (
+                    {col_name_csv}
+                )
+                SELECT
+                    {col_name_csv}
+                FROM {self._full_table_name} AS d
+                WHERE
+                    NOT EXISTS (
+                        SELECT 1 
+                        FROM {self._history_table_name} AS h
+                        WHERE
+                            {pks_match}
+                    )
+            """
+
+            return self._cur.execute(sql=sql, params=None)
+        except Exception as e:
+            return data.Error.new(str(e), table_name=self._full_table_name)
+
+    def upsert_rows_from_staging(self, /, rows: typing.Iterable[data.Row]) -> None | data.Error:
+        try:
+            if not rows:
+                return None
+
+            col_names = sorted({c.name for c in self._dst_table.columns})
+
+            def col_name_csv(prefix: str, /) -> str:
+                return ", ".join(prefix + _wrap_name(c) for c in col_names)
 
             pk_csv = ", ".join(_wrap_name(c) for c in self._dst_table.pk)
 
             set_values_csv = (
-                "\n, ".join(
+                ", ".join(
                     f"{_wrap_name(c)} = EXCLUDED.{_wrap_name(c)}"
                     for c in col_names
                     if c not in self._dst_table.pk
                 )
-                + "\n, poa_hd = EXCLUDED.poa_hd, poa_op = 'u'\n, poa_ts = %(batch_ts)s"
+                + ", poa_hd = EXCLUDED.poa_hd, poa_op = 'u', poa_ts = now()"
             )
 
-            if self._dst_table.schema_name:
-                full_table_name = f"{_wrap_name(self._dst_table.schema_name)}.{_wrap_name(self._dst_table.table_name)}"
-            else:
-                full_table_name = _wrap_name(self._dst_table.table_name)
-
-            sql = textwrap.dedent(
-                f"""
-                INSERT INTO {full_table_name}
-                  ({col_name_csv}, poa_hd, poa_op)
-                VALUES
-                  ({placeholders}, {hd}, 'a')
+            sql = f"""
+                INSERT INTO {self._full_table_name} (
+                    {col_name_csv('')}
+                )
+                SELECT 
+                    {col_name_csv('stg.')}
+                FROM {self._staging_table_name} AS stg
                 ON CONFLICT ({pk_csv})
-                DO UPDATE SET
-                  {set_values_csv}
+                DO UPDATE SET 
+                    {set_values_csv}
                 WHERE
-                    {full_table_name}.poa_hd <> EXCLUDED.poa_hd
-                    OR {full_table_name}.poa_op = 'd'
+                    {self._full_table_name}.poa_hd <> EXCLUDED.poa_hd
+                    OR {self._full_table_name}.poa_op = 'd'
                 RETURNING poa_op
             """
-            ).strip()
-            self._cur.executemany(sql, ({"batch_ts": self._batch_ts} | row for row in rows))
+
+            return self._cur.execute(sql=sql, params=None)
+        except Exception as e:
+            return data.Error.new(str(e), table_name=self._full_table_name)
 
 
 def _generate_column_definition(*, col: data.Column) -> str:

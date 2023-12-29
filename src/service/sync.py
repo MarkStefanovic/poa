@@ -260,7 +260,7 @@ def _full_refresh(
         logger.info(
             f"Upserting rows {rows_upserted} to {rows_upserted + len(chunk)} of {rows_to_upsert}..."
         )
-        dst_ds.upsert_rows(chunk)
+        dst_ds.upsert_rows_from_staging(chunk)
         rows_upserted += len(chunk)
 
     execution_millis = int((datetime.datetime.now() - start_time).total_seconds() * 1000)
@@ -309,7 +309,7 @@ def _incremental_refresh_from_last(
         logger.info(
             f"Upserting rows {rows_upserted} to {rows_upserted + len(chunk)} of {rows_to_upsert}..."
         )
-        dst_ds.upsert_rows(chunk)
+        dst_ds.upsert_rows_from_staging(chunk)
         rows_upserted += len(chunk)
 
     execution_millis = int((datetime.datetime.now() - start_time).total_seconds() * 1000)
@@ -382,7 +382,7 @@ def _incremental_compare_refresh(
             logger.info(
                 f"Upserting rows {rows_upserted} to {rows_upserted + len(chunk)} of {rows_to_upsert}..."
             )
-            dst_ds.upsert_rows(chunk)
+            dst_ds.upsert_rows_from_staging(chunk)
             rows_upserted += len(chunk)
 
     if deleted_keys:

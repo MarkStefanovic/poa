@@ -16,7 +16,6 @@ def create(
     dst_schema_name: str | None,
     dst_table_name: str,
     src_table: data.Table,
-    batch_ts: datetime.datetime,
     after: dict[str, datetime.date],
 ) -> data.DstDs | data.Error:
     try:
@@ -27,7 +26,6 @@ def create(
                 dst_schema_name=dst_schema_name,
                 dst_table_name=dst_table_name,
                 src_table=src_table,
-                batch_ts=batch_ts,
                 after=after,
             )
 
@@ -37,7 +35,6 @@ def create(
             dst_schema_name=dst_schema_name,
             dst_table_name=dst_table_name,
             src_table=src_table,
-            batch_ts=batch_ts,
             after=tuple(after.items()),
         )
     except Exception as e:
@@ -47,6 +44,5 @@ def create(
             dst_schema_name=dst_schema_name,
             dst_table_name=dst_table_name,
             src_table=src_table,
-            batch_ts=batch_ts,
             after=tuple(after.items()),
         )

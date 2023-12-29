@@ -98,7 +98,7 @@ class PgCache(data.Cache):
         db_name: str,
         schema_name: str | None,
         table_name: str,
-    ) -> data.Table | None:
+    ) -> data.Table | None | data.Error:
         self._cur.execute(
             """
             SELECT 
@@ -124,7 +124,6 @@ class PgCache(data.Cache):
         if result:
             col_defs: list[data.Column] = []
             for row in result:
-                data_type = _get_data_type_for_data_type_db_name(row["col_data_type"])
                 (
                     col_name,
                     col_data_type,
@@ -133,6 +132,10 @@ class PgCache(data.Cache):
                     col_scale,
                     col_nullable,
                 ) = row
+
+                data_type = _get_data_type_for_data_type_db_name(col_data_type)
+                if isinstance(data_type, data.Error):
+                    return data_type
 
                 col_def = data.Column(
                     name=col_name,
